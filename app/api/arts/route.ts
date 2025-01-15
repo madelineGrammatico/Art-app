@@ -1,3 +1,4 @@
+import { prisma } from "@/src/lib/prisma";
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET() {
@@ -8,14 +9,14 @@ export async function GET() {
 
 export async function POST(request: NextRequest) {
     const formData = await request.formData()
-    console.log(formData)
 
-    const data = {
-        title: formData.get("title"),
-        price: formData.get("price"),
-    }
-    
+    const newArt = await prisma.art.create({
+        data: {
+            title: String(formData.get("title")),
+            price: String(formData.get("price"))
+        }
+    })
     return NextResponse.json({
-        json: data
+        art: newArt
     })
 }

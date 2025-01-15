@@ -1,3 +1,4 @@
+'use client'
 import { Label } from '@radix-ui/react-label'
 // import Form from 'next/form'
 import { Input } from '@/src/components/ui/input' 
