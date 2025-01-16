@@ -4,17 +4,16 @@ import Form from 'next/form'
 import { Input } from '@/src/components/ui/input' 
 import { Button } from '@/src/components/ui/button'
 import { useFormStatus } from 'react-dom'
+import { createArtAction } from './arts.action'
 
 export default function Page() {
+   
     const createArt = async (FormData: FormData) => {
-        const result = await fetch(`/api/arts`, {
-            body: JSON.stringify({
-                title: FormData.get("title"),
-                price: FormData.get("price")
-            }),
-            method: 'POST',
+        
+        const json = await createArtAction({
+            title: String(FormData.get('title')),
+            price: String(FormData.get('price'))
         })
-        const json = await result.json()
         console.log(json)
     }
    
