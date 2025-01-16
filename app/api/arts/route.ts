@@ -8,12 +8,12 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-    const formData = await request.formData()
+    const json = await request.json()
 
     const newArt = await prisma.art.create({
         data: {
-            title: String(formData.get("title")),
-            price: String(formData.get("price"))
+            title: json.title,
+            price: json.price
         }
     })
     return NextResponse.json({
