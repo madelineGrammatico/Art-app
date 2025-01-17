@@ -1,11 +1,11 @@
-import React from 'react'
+import React, { PropsWithChildren } from 'react'
 
-type HeaderProps = {title: string}
+type HeaderProps = {title?: string} &PropsWithChildren
 
-export function Header({title}: HeaderProps ) {
+export function Header({title, children}: HeaderProps ) {
   return (
     <header className='p-4  bg-slate-300'>
-        <p>{title}</p>
+        <p>{title ? title : children}</p>
     </header>
   )
 }
