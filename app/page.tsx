@@ -1,7 +1,13 @@
 import { buttonVariants } from "@/src/components/ui/button";
+import { prisma } from "@/src/lib/prisma";
 import Link from "next/link";
 
-export default function Home() {
+export default async function Home() {
+  const arts = await prisma.art.findMany({
+    orderBy: {
+      createdAt: "desc"
+    }
+  })
   return (
     <div className="flex flex-col gap-4 w-full">
       <div className="bg-slate-200 flex flex-col gap-4 w-full p-4">
@@ -11,25 +17,17 @@ export default function Home() {
             className={buttonVariants({size:"lg", variant:"outline"})} 
         >admin</Link>
       </div>
-      <div className="flex flex-col gap-4 w-full">    
-        <Link
-          href="/admin/arts/truc"
-          className={buttonVariants({size:"lg", variant:"secondary"})} 
-        >
-          truc
-        </Link>
-        <Link
-          href="/admin/arts/machin"
-          className={buttonVariants({size:"lg", variant:"secondary"})} 
-        >
-          machin
-        </Link>
-        <Link
-          href="/admin/arts/bidule"
-          className={buttonVariants({size:"lg", variant:"secondary"})} 
-        >
-          bidule
-        </Link>
+      <div className="flex flex-col gap-4 w-full">  
+        { arts.map((art)=> 
+          <Link
+            href={`/preview/${art.id}`}
+            key={art.id}
+            className={buttonVariants({size:"lg", variant:"secondary"})} 
+          >
+            {art.title}
+          </Link>
+        )}  
+        
       </div>
       
     </div>
