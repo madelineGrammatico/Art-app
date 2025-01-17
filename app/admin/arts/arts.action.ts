@@ -16,11 +16,35 @@ export const createArtAction = async (art: {
         })
     } catch {
         return {
-            errror: "Error while creating the art"
+            error: "Error while creating the art"
         }
     }
    
     redirect("/")
+
+}
+
+export const editArtAction = async (id: number, art: {
+    title: string, 
+    price: string
+}) => {
+    try {
+        await prisma.art.update({
+            where: {
+                id: id
+            },
+            data: {
+                title: art.title,
+                price: art.price
+            }
+        })
+    } catch {
+        return {
+            error: "Error while creating the art"
+        }
+    }
+   
+    redirect("/admin")
 
 }
 
