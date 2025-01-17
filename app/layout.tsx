@@ -2,6 +2,8 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Header } from "@/src/components/Header";
+import Link from "next/link";
+import { buttonVariants } from "@/src/components/ui/button";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -28,8 +30,23 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased h-full px-4 py-6`}
       >
-        <Header title="Grammatico Madeline"/>
-        <div className="flex Flex-col gap-4 py-4">
+        <Header title="Grammatico Madeline">
+        <nav className="flex gap-4">
+            <Link 
+                href="/"
+                className={buttonVariants({size:"lg", variant:"outline"})} 
+            >
+                Accueil
+            </Link>
+            <Link 
+                href="/admin"
+                className={buttonVariants({size:"lg", variant:"outline"})} 
+            >
+                Admin
+            </Link>
+        </nav>
+        </Header>
+        <div className="flex flex-col gap-4 py-4">
           {children}
         </div>
       </body>

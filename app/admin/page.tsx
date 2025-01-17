@@ -1,5 +1,5 @@
 import React from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/src/components/ui/card'
+import { Card, CardContent} from '@/src/components/ui/card'
 import Link from 'next/link'
 import { buttonVariants } from '@/src/components/ui/button'
 import { prisma } from '@/src/lib/prisma'
@@ -11,18 +11,9 @@ export default async function Page() {
             createdAt: "desc"
         }
     })
-  return (
-    <div className='flex flex-col w-full p-4 gap-4'>
-        <Link 
-            href="/"
-            className={buttonVariants({size:"lg", variant:"outline"})} 
-        >
-            Accueil
-        </Link>
+    return (
         <Card className='w-full'>
-            <CardHeader>
-                <CardTitle>URL : /admin</CardTitle>
-            </CardHeader>
+            
             <CardContent className='flex flex-col w-full p-6 gap-4'>
                 { arts.map((art)=> 
                     <Card className="flex items-start gap-4 p-4" key={art.id}>
@@ -48,7 +39,5 @@ export default async function Page() {
                 </Link>
             </CardContent>
         </Card>
-        
-    </div>
-  )
+    )
 }
