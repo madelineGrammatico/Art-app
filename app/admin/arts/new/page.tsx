@@ -4,7 +4,7 @@ import Form from 'next/form'
 import { Input } from '@/src/components/ui/input' 
 import { Button } from '@/src/components/ui/button'
 import { useFormStatus } from 'react-dom'
-import { createArtAction } from './arts.action'
+import { createArtAction } from '../arts.action'
 
 export default function Page() {
    

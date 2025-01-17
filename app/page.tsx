@@ -11,7 +11,7 @@ export default function Home() {
             className={buttonVariants({size:"lg", variant:"outline"})} 
         >admin</Link>
       </div>
-      <div className="flex flex-col gap-4 w-full">
+      <div className="flex flex-col gap-4 w-full">    
         <Link
           href="/admin/arts/truc"
           className={buttonVariants({size:"lg", variant:"secondary"})} 

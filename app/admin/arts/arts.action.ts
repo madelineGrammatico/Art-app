@@ -23,3 +23,15 @@ export const createArtAction = async (art: {
     redirect("/")
 
 }
+
+export const deleteArtAction = async (id: number) => {
+    await prisma.art.delete({
+        where: {
+            id: id
+        }
+    })
+
+    return {
+        message: "Art deleted"
+    }
+}
