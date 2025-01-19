@@ -30,21 +30,22 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased h-full px-4 py-6`}
       >
-        <Header title="Grammatico Madeline">
-        <nav className="flex gap-4">
-            <Link 
-                href="/"
-                className={buttonVariants({size:"lg", variant:"outline"})} 
-            >
-                Accueil
-            </Link>
-            <Link 
-                href="/admin"
-                className={buttonVariants({size:"lg", variant:"outline"})} 
-            >
-                Admin
-            </Link>
-        </nav>
+        <Header>
+          <nav className="flex flex-row p-4 gap-4 items-center">
+              <Link className="flex-1" href="./">Grammatico Madeline</Link>
+              <Link 
+                  href="/"
+                  className={buttonVariants({size:"lg", variant:"outline"})} 
+              >
+                  Accueil
+              </Link>
+              <Link 
+                  href="/admin"
+                  className={buttonVariants({size:"lg", variant:"outline"})} 
+              >
+                  Admin
+              </Link>
+          </nav>
         </Header>
         <div className="flex flex-col gap-4 py-4">
           {children}
