@@ -4,6 +4,8 @@ import "./globals.css";
 import { Header } from "@/src/components/Header";
 import Link from "next/link";
 import { buttonVariants } from "@/src/components/ui/button";
+import { Separator } from "@/src/components/ui/separator"
+
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -28,11 +30,11 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased h-full px-4 py-6`}
+        className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased h-full px-16 py-6 bg-slate-400`}
       >
         <Header>
-          <nav className="flex flex-row p-4 gap-4 items-center">
-              <Link className="flex-1" href="./">Grammatico Madeline</Link>
+          <nav className="flex flex-row py-4 gap-4 items-center color">
+              <Link className="flex-1  text-white" href="./">Grammatico Madeline</Link>
               <Link 
                   href="/"
                   className={buttonVariants({size:"lg", variant:"outline"})} 
@@ -47,6 +49,7 @@ export default function RootLayout({
               </Link>
           </nav>
         </Header>
+        <Separator/>
         <div className="flex flex-col gap-4 py-4">
           {children}
         </div>
