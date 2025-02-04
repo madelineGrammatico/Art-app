@@ -21,7 +21,7 @@ export default async function page({params}: Pageprops) {
         </Card>
     )
     return (
-        <div className='flex flex-col w-full p-4 gap-4'>
+        <div className='flex flex-col w-full py-4 gap-4'>
             <Link
                 href="/"
                 className={buttonVariants({size:"lg", variant:"secondary"})}

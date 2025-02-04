@@ -3,7 +3,19 @@ import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { Header } from "@/src/components/Header";
 import Link from "next/link";
-import { buttonVariants } from "@/src/components/ui/button";
+import { Separator } from "@/src/components/ui/separator"
+import {
+    Menubar,
+  MenubarContent,
+  MenubarItem,
+  MenubarMenu,
+  // MenubarSeparator,
+  // MenubarShortcut,
+  // MenubarPortal,
+  MenubarTrigger,
+} from "@/src/components/ui/menubar"
+
+
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -28,24 +40,43 @@ export default function RootLayout({
   return (
     <html lang="en" className="h-full">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased h-full px-4 py-6`}
+        className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased h-full px-16 py-6 bg-slate-400`}
       >
-        <Header title="Grammatico Madeline">
-        <nav className="flex gap-4">
-            <Link 
-                href="/"
-                className={buttonVariants({size:"lg", variant:"outline"})} 
-            >
-                Accueil
-            </Link>
-            <Link 
-                href="/admin"
-                className={buttonVariants({size:"lg", variant:"outline"})} 
-            >
-                Admin
-            </Link>
-        </nav>
+        <Header>
+          <nav className="flex flex-row py-4 gap-4 items-center color">
+            <Link className="flex-1  text-white" href="/">Grammatico Madeline</Link>
+            <Menubar className="flex rounded-md bg-transparent p-[3px] text-white w-auto">
+              <MenubarMenu >
+                <MenubarTrigger>Home</MenubarTrigger>
+                <MenubarContent className="bg-slate-400 text-white">
+                  <MenubarItem>
+                   <Link href="/">
+                        Accueil
+                    </Link>
+                  </MenubarItem>
+                </MenubarContent>
+              </MenubarMenu>
+
+              <MenubarMenu>
+                <MenubarTrigger>Admin</MenubarTrigger>
+                <MenubarContent className="bg-slate-400 text-white">
+                  <MenubarItem>
+                    <Link href="/admin">
+                      Art
+                    </Link>
+                  </MenubarItem>
+                  <MenubarItem>
+                    <Link href="/admin/arts/new">
+                      New Art
+                    </Link>
+                  </MenubarItem>
+                </MenubarContent>
+              </MenubarMenu>
+            </Menubar>
+          </nav>
+          
         </Header>
+        <Separator/>
         <div className="flex flex-col gap-4 py-4">
           {children}
         </div>
