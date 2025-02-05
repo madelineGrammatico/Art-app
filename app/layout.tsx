@@ -72,6 +72,27 @@ export default function RootLayout({
                   </MenubarItem>
                 </MenubarContent>
               </MenubarMenu>
+
+              <MenubarMenu>
+                <MenubarTrigger>Sign</MenubarTrigger>
+                <MenubarContent className="bg-slate-400 text-white">
+                  <MenubarItem>
+                    <Link href="/sign-in">
+                      Sign In
+                    </Link>
+                  </MenubarItem>
+                  <MenubarItem>
+                    <Link href="/sign-up">
+                      Sign Up
+                    </Link>
+                  </MenubarItem>
+                  <MenubarItem>
+                    <Link href="">
+                      Déconnection
+                    </Link>
+                  </MenubarItem>
+                </MenubarContent>
+              </MenubarMenu>
             </Menubar>
           </nav>
           
