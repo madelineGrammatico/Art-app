@@ -1,8 +1,13 @@
 import { Button } from "@/src/components/ui/button";
 import { Input } from "@/src/components/ui/input";
+import { auth } from "@/src/lib/auth";
 import Link from "next/link";
+import { redirect } from "next/navigation";
 
 const Page = async () => {
+  const session = await auth()
+  if(session) redirect("/")
+    
   return (
     <div className="w-full max-w-sm mx-auto space-y-6 text-white">
       <h1 className="text-2xl font-bold text-center mb-6">Se connecter</h1>
