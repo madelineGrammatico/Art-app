@@ -3,19 +3,20 @@ import { Input } from "@/src/components/ui/input";
 import { auth } from "@/src/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
+import { Card } from "@/src/components/ui/card";
 
 const Page = async () => {
   const session = await auth()
-  console.log(session)
   if(session) {redirect("/")}
 
   return (
-    <div className="w-full max-w-sm mx-auto space-y-6  text-white">
+    <Card className="w-full rounded-2xl max-w-sm mx-auto my-8">
+    <div className="space-y-6 p-6 text-white bg-slate-400">
       <h1 className="text-2xl font-bold text-center mb-6">Créer un compte</h1>
         <p>Connection par Google bientôt!</p>
       <div className="relative">
         <div className="absolute inset-0 flex items-center">
-          <span className="w-full border-t" />
+          <span className="w-full border-t"/>
         </div>
         <div className="relative flex justify-center text-sm">
           <span className="bg-background px-2 text-muted-foreground rounded-sm">
@@ -37,13 +38,15 @@ const Page = async () => {
           type="email"
           required
           autoComplete="email"
+          className="bg-white"
         />
         <Input
           name="password"
-          placeholder="Password"
+          placeholder="Mot de passe"
           type="password"
           required
           autoComplete="new-password"
+          className="bg-white"
         />
         <Button className="w-full" type="submit">
           Créer un compte
@@ -56,6 +59,7 @@ const Page = async () => {
         </Button>
       </div>
     </div>
+    </Card>
   );
 };
 
