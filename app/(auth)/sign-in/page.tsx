@@ -3,7 +3,8 @@ import { Button } from "@/src/components/ui/button";
 import { Card } from "@/src/components/ui/card";
 import { Input } from "@/src/components/ui/input";
 import { Separator } from "@/src/components/ui/separator";
-import { auth } from "@/src/lib/auth";
+import { auth, signIn } from "@/src/lib/auth";
+import { executeAction } from "@/src/lib/executeAction";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 
@@ -30,8 +31,13 @@ const Page = async () => {
         {/* Email/Password Sign In */}
         <form
           className="space-y-4"
-          action={async () => {
+          action={async (formData: FormData) => {
             "use server";
+            await executeAction({
+              actionFn: async () => {
+                await signIn("credentials", formData)
+              }
+            })
           }}
         >
           <Input
@@ -40,7 +46,7 @@ const Page = async () => {
             type="email"
             required
             autoComplete="email"
-            className="bg-white"
+            className="bg-white text-black"
           />
           <Input
             name="password"
@@ -48,7 +54,7 @@ const Page = async () => {
             type="password"
             required
             autoComplete="current-password"
-            className="bg-white"
+            className="bg-white text-black"
           />
           <Button className="w-full" type="submit">
             Se connecter

@@ -81,7 +81,7 @@ export default async function  RootLayout({
               </MenubarMenu>
               {session ? 
                 <MenubarMenu>
-                  <MenubarTrigger>{session?.user?.name?.split(" ")[0]}</MenubarTrigger>
+                  <MenubarTrigger>{session?.user?.name?.split(" ")[0] || "Session"}</MenubarTrigger>
                   <MenubarContent className="bg-slate-400 text-white">
                     <MenubarItem>
                       <Link href="/">
