@@ -1,2 +1,3 @@
 import NextAuth from "next-auth"
-export const { auth, handlers } = NextAuth({ providers: [] })
+import Google from "next-auth/providers/google"
+export const { auth, handlers, signIn, signOut } = NextAuth({ providers: [Google] })
