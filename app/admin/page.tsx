@@ -12,9 +12,8 @@ export default async function Page() {
         }
     })
     return (
-        <Card className='w-full'>
-            
-            <CardContent className='flex flex-col w-full p-6 gap-4  bg-slate-400'>
+        <Card className='w-full rounded-2xl'>
+            <CardContent className='flex flex-col w-full p-6 gap-4 bg-slate-400'>
                 { arts.map((art)=> 
                     <Card className="flex items-start gap-4 p-4" key={art.id}>
                         <div className='flex flex-col flex-1 gap-2'>
