@@ -2,6 +2,7 @@ import GoogleSignIn from "@/src/components/Google-Sign-In";
 import { Button } from "@/src/components/ui/button";
 import { Card } from "@/src/components/ui/card";
 import { Input } from "@/src/components/ui/input";
+import { Separator } from "@/src/components/ui/separator";
 import { auth } from "@/src/lib/auth";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -17,7 +18,7 @@ const Page = async () => {
           <GoogleSignIn/>
         <div className="relative">
           <div className="absolute inset-0 flex items-center">
-            <span className="w-full border-t" />
+            <Separator/>
           </div>
           <div className="relative flex justify-center text-sm">
             <p className="bg-background px-2 text-muted-foreground rounded-sm">
@@ -56,7 +57,7 @@ const Page = async () => {
 
         <div className="text-center">
           <Button asChild variant="link">
-            <Link href="/sign-up">Pas encore de compte? Sign up</Link>
+            <Link href="/sign-up">Pas encore de compte ? Sign up</Link>
           </Button>
         </div>
       </div>

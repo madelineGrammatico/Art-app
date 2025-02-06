@@ -52,7 +52,7 @@ export function ArtForm({art}: {art?: Art}) {
                         <Input 
                             defaultValue={art?.title}
                             name="title"
-                            className="bg-white"
+                            className="bg-white text-black"
                         />
                     </Label>
                     <Label>
@@ -60,7 +60,7 @@ export function ArtForm({art}: {art?: Art}) {
                         <Input 
                             defaultValue={art?.price}
                             name="price"
-                            className="bg-white"
+                            className="bg-white text-black"
                         />
                     </Label>
                     <SubmitButton/>
