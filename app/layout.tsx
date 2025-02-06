@@ -5,16 +5,17 @@ import { Header } from "@/src/components/Header";
 import Link from "next/link";
 import { Separator } from "@/src/components/ui/separator"
 import {
-    Menubar,
+  Menubar,
   MenubarContent,
   MenubarItem,
   MenubarMenu,
-  // MenubarSeparator,
+  MenubarSeparator,
   // MenubarShortcut,
   // MenubarPortal,
   MenubarTrigger,
 } from "@/src/components/ui/menubar"
 import { auth } from "@/src/lib/auth";
+import { SignOut } from "@/src/components/Sign-out";
 
 
 
@@ -39,7 +40,7 @@ export default async function  RootLayout({
   children: React.ReactNode;
 }>) {
   const session = await auth()
-  
+
   return (
     <html lang="en" className="h-full">
       <body
@@ -49,7 +50,7 @@ export default async function  RootLayout({
           <nav className="flex flex-row py-4 gap-4 items-center color">
             <Link className="flex-1  text-white text-2xl font-bold" href="/">Grammatico Madeline</Link>
             <Menubar className="flex rounded-md bg-transparent p-[3px] text-white w-auto">
-              <MenubarMenu >
+              <MenubarMenu>
                 <MenubarTrigger>Galerie</MenubarTrigger>
                 <MenubarContent className="bg-slate-400 text-white">
                   <MenubarItem>
@@ -60,21 +61,7 @@ export default async function  RootLayout({
                 </MenubarContent>
               </MenubarMenu>
 
-              {session && <MenubarMenu>
-                <MenubarTrigger>session</MenubarTrigger>
-                <MenubarContent className="bg-slate-400 text-white">
-                  <MenubarItem>
-                    <Link href="/admin">
-                      Art
-                    </Link>
-                  </MenubarItem>
-                  <MenubarItem>
-                    <Link href="/admin/arts/new">
-                      New Art
-                    </Link>
-                  </MenubarItem>
-                </MenubarContent>
-              </MenubarMenu>}
+              
 
 
               <MenubarMenu>
@@ -92,27 +79,40 @@ export default async function  RootLayout({
                   </MenubarItem>
                 </MenubarContent>
               </MenubarMenu>
-
-              <MenubarMenu>
-                <MenubarTrigger>Sign</MenubarTrigger>
-                <MenubarContent className="bg-slate-400 text-white">
-                  <MenubarItem>
-                    <Link href="/sign-in">
-                      Sign In
-                    </Link>
-                  </MenubarItem>
-                  <MenubarItem>
-                    <Link href="/sign-up">
-                      Sign Up
-                    </Link>
-                  </MenubarItem>
-                  <MenubarItem>
-                    <Link href="">
-                      Déconnection
-                    </Link>
-                  </MenubarItem>
-                </MenubarContent>
-              </MenubarMenu>
+              {session ? 
+                <MenubarMenu>
+                  <MenubarTrigger>{session?.user?.name?.split(" ")[0]}</MenubarTrigger>
+                  <MenubarContent className="bg-slate-400 text-white">
+                    <MenubarItem>
+                      <Link href="/">
+                        Art
+                      </Link>
+                    </MenubarItem>
+                    <MenubarSeparator/>
+                      <MenubarItem>
+                        <SignOut/>
+                      </MenubarItem>
+                  </MenubarContent>
+                </MenubarMenu>
+                
+                :
+                <MenubarMenu>
+                  <MenubarTrigger>Sign</MenubarTrigger>
+                  <MenubarContent className="bg-slate-400 text-white max-w-sm mx-auto">
+                    <MenubarItem>
+                      <Link href="/sign-in">
+                        Sign In
+                      </Link>
+                    </MenubarItem>
+                    <MenubarItem>
+                      <Link href="/sign-up">
+                        Sign Up
+                      </Link>
+                    </MenubarItem>
+                   
+                  </MenubarContent>
+                </MenubarMenu>
+              }
             </Menubar>
           </nav>
           
