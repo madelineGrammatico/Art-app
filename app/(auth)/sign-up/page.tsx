@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Card } from "@/src/components/ui/card";
 import GoogleSignIn from "@/src/components/Google-Sign-In";
 import { Separator } from "@/src/components/ui/separator";
+import { signUp } from "@/src/lib/actions/authActions";
 
 const Page = async () => {
   const session = await auth()
@@ -31,17 +32,21 @@ const Page = async () => {
       {/* Email/Password Sign Up */}
       <form
         className="space-y-4"
-        action={async () => {
+        action={async (formdata: FormData) => {
           "use server";
+          const res = await signUp(formdata)
+          if (res.success) {
+            redirect("/sign-in")
+          }
         }}
-      >
+      > 
         <Input
           name="email"
           placeholder="Email"
           type="email"
           required
           autoComplete="email"
-          className="bg-white"
+          className="bg-white text-black"
         />
         <Input
           name="password"
@@ -49,7 +54,7 @@ const Page = async () => {
           type="password"
           required
           autoComplete="new-password"
-          className="bg-white"
+          className="bg-white text-black"
         />
         <Button className="w-full" type="submit">
           Créer un compte

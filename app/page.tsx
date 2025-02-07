@@ -11,7 +11,6 @@ export default async function Home() {
   })
   return (
     <div className="flex flex-col gap-4 w-full">
-      <Header>URL : Home</Header>
       <div className="flex flex-col gap-4 w-full">  
         { arts.map((art)=> 
           <Link
