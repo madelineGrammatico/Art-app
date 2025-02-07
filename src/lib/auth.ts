@@ -22,10 +22,17 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
             const user = await prisma.user.findUnique({
                 where: {
                     email: validatedCredentials.email
-                }
+                },
+                include: { accounts: true }
             })
-            if (!user) throw new Error("Utilisateur non trouvé");
+            if (!user) throw new Error("Utilisateur non trouvé")
 
+            const hasGoogleAccount = user.accounts.some(account => account.provider === "google")
+            if (hasGoogleAccount) {
+                throw new Error("Cet utilisateur est enregistré avec Google. Veuillez vous connecter avec Google.")
+            }
+            if (!user.password) throw new Error("Mot de passe non défini.")
+              
             const passwordMatch = await bcrypt.compare(validatedCredentials.password, user.password);
             if (!passwordMatch) throw new Error("Mot de passe incorrect");
             
