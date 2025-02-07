@@ -4,7 +4,7 @@ import Credentials from "next-auth/providers/credentials"
 import { prisma } from "./prisma"
 import { PrismaAdapter } from "@auth/prisma-adapter"
 import { credentialShema } from "./shema"
-
+import bcrypt from "bcrypt"
 import { v4 as uuid } from "uuid"
 import { encode as defaultEncode } from "next-auth/jwt"
 
@@ -19,13 +19,15 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         },
         authorize: async (credentials) => {
             const validatedCredentials = credentialShema.parse(credentials)
-            const user = await prisma.user.findFirst({
+            const user = await prisma.user.findUnique({
                 where: {
-                    email: validatedCredentials.email, 
-                    password: validatedCredentials.password
+                    email: validatedCredentials.email
                 }
             })
-            if (!user) throw new Error("Invalid credentials")
+            if (!user) throw new Error("Utilisateur non trouvé");
+
+            const passwordMatch = await bcrypt.compare(validatedCredentials.password, user.password);
+            if (!passwordMatch) throw new Error("Mot de passe incorrect");
             
             return user
         }
