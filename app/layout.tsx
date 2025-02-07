@@ -48,7 +48,7 @@ export default async function  RootLayout({
       >
         <Header>
           <nav className="flex flex-row py-4 gap-4 items-center color">
-            <Link className="flex-1  text-white text-2xl font-bold" href="/">Grammatico Madeline</Link>
+            <Link className="flex-1 text-white text-2xl font-bold" href="/">Madeline Grammatico</Link>
             <Menubar className="flex rounded-md bg-transparent p-[3px] text-white w-auto">
               <MenubarMenu>
                 <MenubarTrigger>Galerie</MenubarTrigger>
@@ -61,15 +61,12 @@ export default async function  RootLayout({
                 </MenubarContent>
               </MenubarMenu>
 
-              
-
-
               <MenubarMenu>
                 <MenubarTrigger>Admin</MenubarTrigger>
                 <MenubarContent className="bg-slate-400 text-white">
                   <MenubarItem>
                     <Link href="/admin">
-                      Art
+                      Arts
                     </Link>
                   </MenubarItem>
                   <MenubarItem>
@@ -84,8 +81,18 @@ export default async function  RootLayout({
                   <MenubarTrigger>{session?.user?.name?.split(" ")[0] || "Session"}</MenubarTrigger>
                   <MenubarContent className="bg-slate-400 text-white">
                     <MenubarItem>
-                      <Link href="/">
-                        Art
+                      <Link href="">
+                        Ma Collection
+                      </Link>
+                    </MenubarItem>
+                    <MenubarItem>
+                      <Link href="">
+                        Mon Panier
+                      </Link>
+                    </MenubarItem>
+                    <MenubarItem>
+                      <Link href="">
+                        Mon Profil
                       </Link>
                     </MenubarItem>
                     <MenubarSeparator/>
@@ -94,7 +101,6 @@ export default async function  RootLayout({
                       </MenubarItem>
                   </MenubarContent>
                 </MenubarMenu>
-                
                 :
                 <MenubarMenu>
                   <MenubarTrigger>Sign</MenubarTrigger>
@@ -109,7 +115,6 @@ export default async function  RootLayout({
                         Sign Up
                       </Link>
                     </MenubarItem>
-                   
                   </MenubarContent>
                 </MenubarMenu>
               }
@@ -118,7 +123,6 @@ export default async function  RootLayout({
           
         </Header>
         <Separator/>
-        {session && <p>{JSON.stringify(session.user?.name)}</p>}
         <div className="flex flex-col gap-4 py-4">
           {children}
         </div>

@@ -5,7 +5,7 @@ type HeaderProps = PropsWithChildren
 export function Header({children}: HeaderProps ) {
   return (
     <header 
-      className='text-2xl font-bold mb-6'
+      className='text-2xl font-bold'
     >
         {children}
     </header>
