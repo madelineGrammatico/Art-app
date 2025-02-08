@@ -40,6 +40,7 @@ export default async function  RootLayout({
   children: React.ReactNode;
 }>) {
   const session = await auth()
+  console.log(session)
 
   return (
     <html lang="en" className="h-full">
@@ -78,7 +79,7 @@ export default async function  RootLayout({
               </MenubarMenu>
               {session ? 
                 <MenubarMenu>
-                  <MenubarTrigger>{session?.user?.name?.split(" ")[0] || "Session"}</MenubarTrigger>
+                  <MenubarTrigger>{session?.user?.firstName || session?.user?.name?.split(" ")[0]}</MenubarTrigger>
                   <MenubarContent className="bg-slate-400 text-white">
                     <MenubarItem>
                       <Link href="">
@@ -122,6 +123,8 @@ export default async function  RootLayout({
           </nav>
           
         </Header>
+        <Separator/>
+              <span>{JSON.stringify(session)}</span>
         <Separator/>
         <div className="flex flex-col gap-4 py-4">
           {children}
