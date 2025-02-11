@@ -40,6 +40,22 @@ const Page = async () => {
           }
         }}
       > 
+         <Input
+          name="firstName"
+          placeholder="Prénom"
+          type="firstName"
+          required
+          autoComplete="firstName"
+          className="bg-white text-black"
+        />
+         <Input
+          name="LastName"
+          placeholder="Nom"
+          type="LastName"
+          required
+          autoComplete="LastName"
+          className="bg-white text-black"
+        />
         <Input
           name="email"
           placeholder="Email"

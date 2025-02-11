@@ -8,6 +8,8 @@ export const signUp = async (formData: FormData) => {
         actionFn: async () => {
             const email = formData.get("email")
             const password = formData.get("password")
+            const firstName = String(formData.get("firstName"))
+            const lastName = String(formData.get("LastName"))
 
             if (!email || !password) {
                 throw new Error("Email et mot de passe sont requis.");
@@ -21,7 +23,10 @@ export const signUp = async (formData: FormData) => {
             await prisma.user.create({
                 data: {
                     email: validedData.email,
-                    password: validedData.password
+                    password: validedData.password,
+                    firstName: firstName,
+                    lastName: lastName
+
                 }
             })
         }

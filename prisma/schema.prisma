@@ -20,6 +20,8 @@ model Art {
 model User {
   id            String          @id @default(cuid())
   name          String?
+  lastName      String?
+  firstName     String?
   email         String?         @unique
   emailVerified DateTime?
   password      String?
