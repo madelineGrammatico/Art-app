@@ -1,12 +1,12 @@
 import { Button } from "@/src/components/ui/button";
 import { Input } from "@/src/components/ui/input";
-import { auth } from "@/src/lib/auth";
+import { auth } from "@/src/lib/auth/auth"; 
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Card } from "@/src/components/ui/card";
 import GoogleSignIn from "@/src/components/Google-Sign-In";
 import { Separator } from "@/src/components/ui/separator";
-import { signUp } from "@/src/lib/actions/authActions";
+import { signUp } from "@/src/lib/auth/actions/authActions";
 
 const Page = async () => {
   const session = await auth()

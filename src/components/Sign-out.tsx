@@ -1,5 +1,5 @@
 import { Button } from "@/src/components/ui/button";
-import { signOut } from "../lib/auth";
+import { signOut } from "../lib/auth/auth";
 
 export const SignOut = () => {
   const handleSignOut = async () => {

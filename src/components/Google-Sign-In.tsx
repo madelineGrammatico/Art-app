@@ -1,6 +1,6 @@
 import { Button } from "@/src/components/ui/button";
 import React from 'react'
-import { signIn } from "../lib/auth";
+import { signIn } from "../lib/auth/auth";
 
 export default function GoogleSignIn() {
   return (
