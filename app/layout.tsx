@@ -14,7 +14,7 @@ import {
   // MenubarPortal,
   MenubarTrigger,
 } from "@/src/components/ui/menubar"
-import { auth } from "@/src/lib/auth";
+import { auth } from "@/src/lib/auth/auth"; 
 import { SignOut } from "@/src/components/Sign-out";
 
 
