@@ -12,7 +12,20 @@ const adapter = PrismaAdapter(prisma)
 
 export const { auth, handlers, signIn, signOut } = NextAuth({ 
     adapter,
-    providers: [Google, Credentials({
+    providers: [
+      Google({
+        profile(profile) {
+          return {
+            id: profile.sub,
+            name: profile.name,
+            firstName: profile.given_name,
+            lastName: profile.family_name,
+            email: profile.email,
+            image: profile.picture
+          }
+        }
+      }), 
+      Credentials({
         credentials: {
             email: {},
             password: {},
