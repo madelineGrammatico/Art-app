@@ -3,7 +3,7 @@ import { Button } from "@/src/components/ui/button";
 import { Card } from "@/src/components/ui/card";
 import { Input } from "@/src/components/ui/input";
 import { Separator } from "@/src/components/ui/separator";
-import { auth, signIn } from "@/src/lib/auth";
+import { auth, signIn } from "@/src/lib/auth/auth";
 import { executeAction } from "@/src/lib/executeAction";
 import Link from "next/link";
 import { redirect } from "next/navigation";

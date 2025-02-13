@@ -3,7 +3,7 @@ import type { DefaultSession } from "next-auth"
 declare module "next-auth" {
   interface User {
     firstName?: string | null
-    lastName?: string| null
+    lastName?: string | null
   }
 
   interface Session extends DefaultSession{
