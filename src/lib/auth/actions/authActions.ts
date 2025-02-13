@@ -24,6 +24,7 @@ export const signUp = async (formData: FormData) => {
                 data: {
                     email: validedData.email,
                     password: validedData.password,
+                    name: firstName + " " + lastName,
                     firstName: firstName,
                     lastName: lastName
 
