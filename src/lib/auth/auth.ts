@@ -11,77 +11,80 @@ import { encode as defaultEncode } from "next-auth/jwt"
 const adapter = PrismaAdapter(prisma)
 
 export const { auth, handlers, signIn, signOut } = NextAuth({ 
-    adapter,
-    providers: [
-      Google({
-        profile(profile) {
-          return {
-            id: profile.sub,
-            name: profile.name,
-            firstName: profile.given_name,
-            lastName: profile.family_name,
-            email: profile.email,
-            image: profile.picture
-          }
+  adapter,
+  providers: [
+    Google({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      profile(profile) {
+        return {
+          id: profile.sub,
+          name: profile.name,
+          firstName: profile.given_name,
+          lastName: profile.family_name,
+          email: profile.email,
+          image: profile.picture
         }
-      }), 
-      Credentials({
-        credentials: {
-            email: {},
-            password: {},
-        },
-        authorize: async (credentials) => {
-            const validatedCredentials = credentialShema.parse(credentials)
-            const user = await prisma.user.findUnique({
-                where: {
-                    email: validatedCredentials.email
-                },
-                include: { accounts: true }
-            })
-            if (!user) throw new Error("Utilisateur non trouvé")
-
-            const hasGoogleAccount = user.accounts.some(account => account.provider === "google")
-            if (hasGoogleAccount) {
-                throw new Error("Cet utilisateur est enregistré avec Google. Veuillez vous connecter avec Google.")
-            }
-            if (!user.password) throw new Error("Mot de passe non défini.")
-              
-            const passwordMatch = await bcrypt.compare(validatedCredentials.password, user.password);
-            if (!passwordMatch) throw new Error("Mot de passe incorrect");
-            
-            return user
-        }
-    })],
-    callbacks: {
-        async jwt({token, account}) {
-            if (account?.provider=== "credentials") {
-                token.credentials = true 
-            }
-            return token
-        }
-    },
-    jwt: {
-        encode: async function (params) {
-          if (params.token?.credentials) {
-            const sessionToken = uuid();
-    
-            if (!params.token.sub) {
-              throw new Error("No user ID found in token");
-            }
-    
-            const createdSession = await adapter?.createSession?.({
-              sessionToken: sessionToken,
-              userId: params.token.sub,
-              expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
-            });
-    
-            if (!createdSession) {
-              throw new Error("Failed to create session");
-            }
-    
-            return sessionToken;
-          }
-          return defaultEncode(params);
-        },
+      }
+    }), 
+    Credentials({
+      credentials: {
+        email: {},
+        password: {},
       },
+      authorize: async (credentials) => {
+        const validatedCredentials = credentialShema.parse(credentials)
+        const user = await prisma.user.findUnique({
+          where: {
+            email: validatedCredentials.email
+          },
+          include: { accounts: true }
+        })
+        if (!user) throw new Error("Utilisateur non trouvé")
+
+        const hasGoogleAccount = user.accounts.some(account => account.provider === "google")
+        if (hasGoogleAccount) {
+          throw new Error("Cet utilisateur est enregistré avec Google. Veuillez vous connecter avec Google.")
+        }
+        if (!user.password) throw new Error("Mot de passe non défini.")
+          
+        const passwordMatch = await bcrypt.compare(validatedCredentials.password, user.password);
+        if (!passwordMatch) throw new Error("Mot de passe incorrect");
+        
+        return user
+      }
+    })
+  ],
+  callbacks: {
+    async jwt({token, account}) {
+        if (account?.provider=== "credentials") {
+            token.credentials = true 
+        }
+        return token
+    }
+  },
+  jwt: {
+    encode: async function (params) {
+      if (params.token?.credentials) {
+        const sessionToken = uuid();
+
+        if (!params.token.sub) {
+          throw new Error("No user ID found in token");
+        }
+
+        const createdSession = await adapter?.createSession?.({
+          sessionToken: sessionToken,
+          userId: params.token.sub,
+          expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+        });
+
+        if (!createdSession) {
+          throw new Error("Failed to create session");
+        }
+
+        return sessionToken;
+      }
+      return defaultEncode(params);
+    },
+  },
 })
