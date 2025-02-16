@@ -16,6 +16,7 @@ import {
 } from "@/src/components/ui/menubar"
 import { auth } from "@/src/lib/auth/auth"; 
 import { SignOut } from "@/src/components/Sign-out";
+import SessionWrapper from "@/src/lib/auth/SessionWrapper"
 
 
 
@@ -47,88 +48,90 @@ export default async function  RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased h-full px-32 py-6 bg-slate-400`}
       >
-        <Header>
-          <nav className="flex flex-row py-4 gap-4 items-center color">
-            <Link className="flex-1 text-white text-2xl font-bold" href="/">Madeline Grammatico</Link>
-            <Menubar className="flex rounded-md bg-transparent p-[3px] text-white w-auto">
-              <MenubarMenu>
-                <MenubarTrigger>Galerie</MenubarTrigger>
-                <MenubarContent className="bg-slate-400 text-white">
-                  <MenubarItem>
-                   <Link href="/">
-                        Arts
-                    </Link>
-                  </MenubarItem>
-                </MenubarContent>
-              </MenubarMenu>
-
-              <MenubarMenu>
-                <MenubarTrigger>Admin</MenubarTrigger>
-                <MenubarContent className="bg-slate-400 text-white">
-                  <MenubarItem>
-                    <Link href="/admin">
-                      Arts
-                    </Link>
-                  </MenubarItem>
-                  <MenubarItem>
-                    <Link href="/admin/arts/new">
-                      New Art
-                    </Link>
-                  </MenubarItem>
-                </MenubarContent>
-              </MenubarMenu>
-              {session ? 
+        <SessionWrapper>
+          <Header>
+            <nav className="flex flex-row py-4 gap-4 items-center color">
+              <Link className="flex-1 text-white text-2xl font-bold" href="/">Madeline Grammatico</Link>
+              <Menubar className="flex rounded-md bg-transparent p-[3px] text-white w-auto">
                 <MenubarMenu>
-                  <MenubarTrigger>{session?.user?.firstName || session?.user?.name?.split(" ")[0]}</MenubarTrigger>
+                  <MenubarTrigger>Galerie</MenubarTrigger>
                   <MenubarContent className="bg-slate-400 text-white">
                     <MenubarItem>
-                      <Link href="">
-                        Ma Collection
+                    <Link href="/">
+                          Arts
                       </Link>
                     </MenubarItem>
-                    <MenubarItem>
-                      <Link href="">
-                        Mon Panier
-                      </Link>
-                    </MenubarItem>
-                    <MenubarItem>
-                      <Link href="">
-                        Mon Profil
-                      </Link>
-                    </MenubarItem>
-                    <MenubarSeparator/>
-                      <MenubarItem>
-                        <SignOut/>
-                      </MenubarItem>
                   </MenubarContent>
                 </MenubarMenu>
-                :
+
                 <MenubarMenu>
-                  <MenubarTrigger>Sign</MenubarTrigger>
-                  <MenubarContent className="bg-slate-400 text-white max-w-sm mx-auto">
+                  <MenubarTrigger>Admin</MenubarTrigger>
+                  <MenubarContent className="bg-slate-400 text-white">
                     <MenubarItem>
-                      <Link href="/sign-in">
-                        Sign In
+                      <Link href="/admin">
+                        Arts
                       </Link>
                     </MenubarItem>
                     <MenubarItem>
-                      <Link href="/sign-up">
-                        Sign Up
+                      <Link href="/admin/arts/new">
+                        New Art
                       </Link>
                     </MenubarItem>
                   </MenubarContent>
                 </MenubarMenu>
-              }
-            </Menubar>
-          </nav>
-          
-        </Header>
-        <Separator/>
-              <span>{JSON.stringify(session)}</span>
-        <Separator/>
-        <div className="flex flex-col gap-4 py-4">
-          {children}
-        </div>
+                {session ? 
+                  <MenubarMenu>
+                    <MenubarTrigger>{session?.user?.firstName || session?.user?.name?.split(" ")[0]}</MenubarTrigger>
+                    <MenubarContent className="bg-slate-400 text-white">
+                      <MenubarItem>
+                        <Link href="">
+                          Ma Collection
+                        </Link>
+                      </MenubarItem>
+                      <MenubarItem>
+                        <Link href="">
+                          Mon Panier
+                        </Link>
+                      </MenubarItem>
+                      <MenubarItem>
+                        <Link href="">
+                          Mon Profil
+                        </Link>
+                      </MenubarItem>
+                      <MenubarSeparator/>
+                        <MenubarItem>
+                          <SignOut/>
+                        </MenubarItem>
+                    </MenubarContent>
+                  </MenubarMenu>
+                  :
+                  <MenubarMenu>
+                    <MenubarTrigger>Sign</MenubarTrigger>
+                    <MenubarContent className="bg-slate-400 text-white max-w-sm mx-auto">
+                      <MenubarItem>
+                        <Link href="/sign-in">
+                          Sign In
+                        </Link>
+                      </MenubarItem>
+                      <MenubarItem>
+                        <Link href="/sign-up">
+                          Sign Up
+                        </Link>
+                      </MenubarItem>
+                    </MenubarContent>
+                  </MenubarMenu>
+                }
+              </Menubar>
+            </nav>
+            
+          </Header>
+          <Separator/>
+                <span>{JSON.stringify(session)}</span>
+          <Separator/>
+          <div className="flex flex-col gap-4 py-4">
+            {children}
+          </div>
+        </SessionWrapper>
       </body>
     </html>
   );
