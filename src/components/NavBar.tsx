@@ -13,8 +13,9 @@ import {
   // MenubarPortal,
   MenubarTrigger,
 } from "@/src/components/ui/menubar"
-import { SignOut } from "@/src/components/Sign-out";
+import { SignOutButton } from "@/src/components/SignOutButton";
 import Link from "next/link";
+import { Separator } from '@radix-ui/react-separator';
 
 export default function NavBar() {
     const { data: session }= useSession()
@@ -71,7 +72,7 @@ export default function NavBar() {
               </MenubarItem>
               <MenubarSeparator/>
                 <MenubarItem>
-                  <SignOut/>
+                  <SignOutButton/>
                 </MenubarItem>
             </MenubarContent>
           </MenubarMenu>
