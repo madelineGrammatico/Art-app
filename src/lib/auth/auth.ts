@@ -4,7 +4,7 @@ import Credentials from "next-auth/providers/credentials"
 import { prisma } from "../prisma"
 import { PrismaAdapter } from "@auth/prisma-adapter"
 import { credentialShema } from "../shema"
-import bcrypt from "bcrypt"
+import bcrypt from "bcryptjs"
 import { v4 as uuid } from "uuid"
 import { encode as defaultEncode } from "next-auth/jwt"
 

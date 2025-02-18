@@ -1,7 +1,7 @@
 import { executeAction } from "../../executeAction"
 import { prisma } from "../../prisma"
 import { credentialShema } from "../../shema"
-import bcrypt from "bcrypt"
+import bcrypt from "bcryptjs"
 
 export const signUp = async (formData: FormData) => {
     return executeAction({
