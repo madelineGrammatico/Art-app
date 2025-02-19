@@ -11,7 +11,7 @@ export default function GoogleSignIn() {
         Continue with Google
       </Button>
     </form>
-  )
+  ) 
 }
 
 

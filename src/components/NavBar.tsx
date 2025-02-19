@@ -1,6 +1,6 @@
 "use client"
 
-import React from 'react'
+import React, { useEffect, useState } from 'react'
 import { useSession } from "next-auth/react";
 
 import {
@@ -15,10 +15,26 @@ import {
 } from "@/src/components/ui/menubar"
 import { SignOutButton } from "@/src/components/SignOutButton";
 import Link from "next/link";
-import { Separator } from '@radix-ui/react-separator';
 
 export default function NavBar() {
-    const { data: session }= useSession()
+  const { data: session, status, update } = useSession();
+  const [isHydrated, setIsHydrated] = useState(false);
+  const updateSession = async() => await update()
+  useEffect(() => {
+    // Effectuer l'hydratation pour éviter les problèmes côté serveur.
+    setIsHydrated(true);
+    updateSession()
+  }, []);
+
+  if (!isHydrated || status === "loading") {
+    return (
+      <nav className="flex flex-row py-4 gap-4 items-center">
+        <div className="flex-1 text-white text-2xl font-bold">Madeline Grammatico</div>
+        <div className="flex">Chargement...</div>
+      </nav>
+    );
+  }
+
   return (
     <nav className="flex flex-row py-4 gap-4 items-center color">
       <Link className="flex-1 text-white text-2xl font-bold" href="/">Madeline Grammatico</Link>
@@ -53,7 +69,7 @@ export default function NavBar() {
 
         { session ? 
           <MenubarMenu>
-            <MenubarTrigger>{session?.user?.firstName || session?.user?.name?.split(" ")[0]}</MenubarTrigger>
+            <MenubarTrigger>{session?.user?.firstName || "session"}</MenubarTrigger>
             <MenubarContent className="bg-slate-400 text-white">
               <MenubarItem>
                 <Link href="">
