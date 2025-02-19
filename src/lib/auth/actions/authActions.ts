@@ -20,7 +20,7 @@ export const signUp = async (formData: FormData) => {
 
             validedData.password = await bcrypt.hash(validedData.password, saltRounds);
 
-            await prisma.user.create({
+            const newUser = await prisma.user.create({
                 data: {
                     email: validedData.email,
                     password: validedData.password,
@@ -30,6 +30,14 @@ export const signUp = async (formData: FormData) => {
 
                 }
             })
+            await prisma.account.create({
+                data: {
+                  userId: newUser.id,
+                  type: "credentials",
+                  provider: "credentials",
+                  providerAccountId: newUser.id,
+                }
+            });
         }
     })
 }
