@@ -17,16 +17,12 @@ import { SignOutButton } from "@/src/components/SignOutButton";
 import Link from "next/link";
 
 export default function NavBar() {
-  const { data: session, status, update } = useSession();
-  const [isHydrated, setIsHydrated] = useState(false);
-  const updateSession = async() => await update()
-  useEffect(() => {
-    // Effectuer l'hydratation pour éviter les problèmes côté serveur.
-    setIsHydrated(true);
-    updateSession()
-  }, []);
+  const { 
+      data: session, 
+      status,
+    } = useSession();
 
-  if (!isHydrated || status === "loading") {
+  if (status === "loading") {
     return (
       <nav className="flex flex-row py-4 gap-4 items-center">
         <div className="flex-1 text-white text-2xl font-bold">Madeline Grammatico</div>
