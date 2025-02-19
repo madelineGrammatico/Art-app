@@ -1,14 +1,11 @@
 import { Button } from "@/src/components/ui/button";
 import React from 'react'
-import { signIn } from "../lib/auth/auth";
+import { GoogleActionSignIn } from "../lib/auth/actions/GoogleActionSignIn";
 
 export default function GoogleSignIn() {
   return (
     <form
-      action={async () => {
-        "use server";
-        await signIn("google")
-      }}
+      action={GoogleActionSignIn}
     >
       <Button className="w-full text-black" variant="outline">
         Continue with Google
