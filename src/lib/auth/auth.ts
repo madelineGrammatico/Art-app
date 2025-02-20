@@ -43,11 +43,11 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         })
         if (!user) throw new Error("Utilisateur non trouvé")
 
-        const hasGoogleAccount = user.accounts.some(account => account.provider === "google")
-        if (hasGoogleAccount) {
-          throw new Error("Cet utilisateur est enregistré avec Google. Veuillez vous connecter avec Google.")
+        const hasCredentialsAccount = user.accounts.some(account => account.provider === "credentials")
+        if (!hasCredentialsAccount) {
+          throw new Error("Cet utilisateur n'est pas enregistré avec un email et mot de passe. Veuillez vous connecter avec une autre méthode.")
         }
-        if (!user.password) throw new Error("Mot de passe non défini.")
+        if (!user.password) throw new Error("Mot de passe non défini. Veuillez vous connecter avec une autre méthode.")
           
         const passwordMatch = await bcrypt.compare(validatedCredentials.password, user.password);
         if (!passwordMatch) throw new Error("Mot de passe incorrect");
