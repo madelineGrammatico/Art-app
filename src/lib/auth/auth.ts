@@ -23,6 +23,7 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
           firstName: profile.given_name,
           lastName: profile.family_name,
           email: profile.email,
+          role: profile.role,
           image: profile.picture
         }
       }
@@ -59,8 +60,9 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
     async jwt({token, account, user}) {
       if (user) {
         token.id = user.id;
-        token.firstName = token.firstName 
-        token.lastName = token.lastName ;
+        token.firstName = user.firstName 
+        token.lastName = user.lastName
+        token.role = user.role
       }
         if (account?.provider=== "credentials") {
             token.credentials = true 
@@ -72,6 +74,7 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
           session.user.id = user.id
           session.user.firstName = user.firstName
           session.user.lastName = user.lastName
+          session.user.role = user.role
         }
       return session
     }
