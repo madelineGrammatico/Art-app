@@ -1,16 +1,28 @@
+"use client"
 import GoogleSignIn from "@/src/components/Google-Sign-In";
 import { Button } from "@/src/components/ui/button";
 import { Card } from "@/src/components/ui/card";
 import { Input } from "@/src/components/ui/input";
 import { Separator } from "@/src/components/ui/separator";
-import { auth, signIn } from "@/src/lib/auth";
-import { executeAction } from "@/src/lib/executeAction";
 import Link from "next/link";
-import { redirect } from "next/navigation";
+import { CredentialsSignInAction} from "./SignInAction";
+import { useSession } from "next-auth/react";
+import { useEffect, useState } from "react";
+import {useRouter} from "next/navigation";
 
-const Page = async () => {
-  const session = await auth()
-  if(session) redirect("/")
+const Page = () => {
+    const {data: session, update} = useSession()
+    
+    const [isSubmit, setIsSubmit] = useState(false)
+    const router= useRouter()
+
+    useEffect(()=>{ 
+      if(session) router.push("/")
+    }, [session, router])
+
+    useEffect(()=> {
+      update()
+    }, [isSubmit])
     
   return (
     <Card className="w-full max-w-sm mx-auto rounded-2xl my-8  bg-slate-400">
@@ -28,17 +40,14 @@ const Page = async () => {
           </div>
         </div>
 
-        {/* Email/Password Sign In */}
         <form
           className="space-y-4"
-          action={async (formData: FormData) => {
-            "use server";
-            await executeAction({
-              actionFn: async () => {
-                await signIn("credentials", formData)
-              }
-            })
-          }}
+          action={ async(formData: FormData) => 
+            { 
+              await CredentialsSignInAction(formData)
+              setIsSubmit(true) 
+            }
+          }
         >
           <Input
             name="email"

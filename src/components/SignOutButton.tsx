@@ -1,9 +1,9 @@
+"use client"
 import { Button } from "@/src/components/ui/button";
-import { signOut } from "../lib/auth/auth";
+import { signOut } from "next-auth/react";
 
-export const SignOut = () => {
+export const SignOutButton = () => {
   const handleSignOut = async () => {
-    'use server'
     await signOut()
   };
 

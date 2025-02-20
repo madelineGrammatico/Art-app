@@ -1,7 +1,7 @@
 import { executeAction } from "../../executeAction"
 import { prisma } from "../../prisma"
 import { credentialShema } from "../../shema"
-import bcrypt from "bcrypt"
+import bcrypt from "bcryptjs"
 
 export const signUp = async (formData: FormData) => {
     return executeAction({
@@ -20,15 +20,24 @@ export const signUp = async (formData: FormData) => {
 
             validedData.password = await bcrypt.hash(validedData.password, saltRounds);
 
-            await prisma.user.create({
+            const newUser = await prisma.user.create({
                 data: {
                     email: validedData.email,
                     password: validedData.password,
+                    name: firstName + " " + lastName,
                     firstName: firstName,
                     lastName: lastName
 
                 }
             })
+            await prisma.account.create({
+                data: {
+                  userId: newUser.id,
+                  type: "credentials",
+                  provider: "credentials",
+                  providerAccountId: newUser.id,
+                }
+            });
         }
     })
 }
