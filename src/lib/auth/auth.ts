@@ -7,6 +7,7 @@ import { credentialShema } from "../shema"
 import bcrypt from "bcryptjs"
 import { v4 as uuid } from "uuid"
 import { encode as defaultEncode } from "next-auth/jwt"
+import { UserRole } from "@prisma/client"
 
 const adapter = PrismaAdapter(prisma)
 
@@ -43,11 +44,11 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         })
         if (!user) throw new Error("Utilisateur non trouvé")
 
-        const hasGoogleAccount = user.accounts.some(account => account.provider === "google")
-        if (hasGoogleAccount) {
-          throw new Error("Cet utilisateur est enregistré avec Google. Veuillez vous connecter avec Google.")
+        const hasCredentialsAccount = user.accounts.some(account => account.provider === "credentials")
+        if (!hasCredentialsAccount) {
+          throw new Error("Cet utilisateur n'est pas enregistré avec un email et mot de passe. Veuillez vous connecter avec une autre méthode.")
         }
-        if (!user.password) throw new Error("Mot de passe non défini.")
+        if (!user.password) throw new Error("Mot de passe non défini. Veuillez vous connecter avec une autre méthode.")
           
         const passwordMatch = await bcrypt.compare(validatedCredentials.password, user.password);
         if (!passwordMatch) throw new Error("Mot de passe incorrect");
@@ -69,12 +70,12 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         }
         return token
     },
-    async session({session, user}) {
-        if (user) {
-          session.user.id = user.id
-          session.user.firstName = user.firstName
-          session.user.lastName = user.lastName
-          session.user.role = user.role
+    async session({session, token}) {
+        if (token) {
+          session.user.id = token.id as string
+          session.user.firstName = token.firstName as string
+          session.user.lastName = token.lastName as string
+          session.user.role = token.role as UserRole
         }
       return session
     }

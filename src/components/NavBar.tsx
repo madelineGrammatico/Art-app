@@ -47,6 +47,7 @@ export default function NavBar() {
           </MenubarContent>
         </MenubarMenu>
 
+        {session?.user.role === "ADMIN" &&
         <MenubarMenu>
           <MenubarTrigger>Admin</MenubarTrigger>
           <MenubarContent className="bg-slate-400 text-white">
@@ -61,7 +62,7 @@ export default function NavBar() {
             </Link>
           </MenubarItem>
           </MenubarContent>
-        </MenubarMenu>
+        </MenubarMenu>}
 
         { session ? 
           <MenubarMenu>
