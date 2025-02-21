@@ -7,6 +7,7 @@ import { credentialShema } from "../shema"
 import bcrypt from "bcryptjs"
 import { v4 as uuid } from "uuid"
 import { encode as defaultEncode } from "next-auth/jwt"
+import { UserRole } from "@prisma/client"
 
 const adapter = PrismaAdapter(prisma)
 
@@ -69,12 +70,12 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         }
         return token
     },
-    async session({session, user}) {
-        if (user) {
-          session.user.id = user.id
-          session.user.firstName = user.firstName
-          session.user.lastName = user.lastName
-          session.user.role = user.role
+    async session({session, token}) {
+        if (token) {
+          session.user.id = token.id as string
+          session.user.firstName = token.firstName as string
+          session.user.lastName = token.lastName as string
+          session.user.role = token.role as UserRole
         }
       return session
     }
