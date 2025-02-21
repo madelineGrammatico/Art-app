@@ -68,8 +68,9 @@ const Page = () => {
           <Button className="w-full" type="submit">
             Se connecter
           </Button>
+          
         </form>
-
+        <Link href="/forgotPassword">mot de passe oublier</Link>
         <div className="text-center">
           <Button asChild variant="link">
             <Link href="/sign-up">Pas encore de compte ? Sign up</Link>
