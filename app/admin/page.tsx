@@ -4,8 +4,14 @@ import Link from 'next/link'
 import { buttonVariants } from '@/src/components/ui/button'
 import { prisma } from '@/src/lib/prisma'
 import { DeleteArtButton } from './deleteArtButton'
+import { hasPermissions } from '@/src/lib/auth/permissions/permissions'
+import { auth } from '@/src/lib/auth/auth'
+// import { redirect } from 'next/navigation'
+import { UserRole } from '@prisma/client'
 
 export default async function Page() {
+    const session = await auth()
+    const role = session?.user?.role as UserRole
      const arts = await prisma.art.findMany({
         orderBy: {
             createdAt: "desc"
@@ -21,11 +27,11 @@ export default async function Page() {
                             <p>{art.price}</p>
                         </div>
                         <div className="flex flex-col gap-2">
-                            <DeleteArtButton id={art.id}/>
-                            <Link
+                            { hasPermissions(role, 'update:arts') &&<Link
                                 href={`admin/arts/${art.id}`}
                                 className={buttonVariants({size: "sm", variant: "outline"})}
-                            >edit</Link>
+                            >edit</Link>}
+                            { hasPermissions(role, 'delete:arts') && (<DeleteArtButton id={art.id}/>)}
                         </div>
                         
                     </Card>
