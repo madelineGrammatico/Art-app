@@ -10,12 +10,41 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Art {
-  id Int @id @default(autoincrement())
-  title String
-  price String
-  createdAt DateTime @default(now())
+model Artwork {
+  id        String       @id @default(cuid())
+  title     String
+  price     String
+
+  invoice   Invoice[]
+  certificate Certificate?
+  createdAt DateTime  @default(now())
+  
 }
+model Certificate {
+  id          String  @id @default(cuid())
+  artworkId   String  @unique
+  artwork     Artwork @relation(fields: [artworkId], references: [id])
+  isssueDate  DateTime
+  content     String
+}
+
+enum InvoiceStatus {
+  PENDING
+  PAID
+  CANCELLED
+}
+
+model Invoice {
+  id          String        @id @default(cuid())
+  artworkId   String
+  artwork     Artwork       @relation(fields: [artworkId], references: [id])
+  buyerId     String
+  buyer       User          @relation(fields: [buyerId], references: [id])
+  invoiceDate DateTime      @default(now())
+  amount      Decimal
+  status      InvoiceStatus
+}
+
 enum UserRole {
   ADMIN
   CLIENT
@@ -30,7 +59,9 @@ model User {
   emailVerified       DateTime?
   password            String?
   image               String?
-  role                UserRole             @default(CLIENT)
+  role                UserRole           @default(CLIENT)
+  
+  invoices            Invoice[]
 
   passwordResetTokens PasswordResetToken[]  
   accounts            Account[]
