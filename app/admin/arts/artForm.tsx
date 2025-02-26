@@ -8,25 +8,23 @@ import { createArtAction, editArtAction } from './arts.action'
 import React from 'react'
 import { Header } from '@/src/components/Header'
 import { Card } from '@/src/components/ui/card'
-import { Art } from '@prisma/client'
+import { Artwork } from '@prisma/client'
 
-export function ArtForm({art}: {art?: Art}) {
+export function ArtForm({artwork}: {artwork?: Artwork}) {
   
     const onSubmit = async (FormData: FormData) => {
         let error: null | string = null
-        if(art) {
-            const json = await editArtAction(art.id, {
+        if(artwork) {
+            const json = await editArtAction(artwork.id, {
                 title: String(FormData.get('title')),
                 price: String(FormData.get('price'))
             })
-            console.log(json)
             error= json.error
         } else {
             const json = await createArtAction({
                 title: String(FormData.get('title')),
                 price: String(FormData.get('price'))
             })
-            console.log(json)
             error= json.error
         }
         if (error) {
@@ -37,7 +35,7 @@ export function ArtForm({art}: {art?: Art}) {
     return (
         <Card className='w-full rounded-2xl max-w-sm mx-auto my-8 text-white'>
             <div className='p-6  bg-slate-400'>
-                <Header>{art ? 
+                <Header>{artwork ? 
                     "Modifier une oeuvre"
                     : "Ajouter une oeuvre"}
                     </Header>
@@ -50,7 +48,7 @@ export function ArtForm({art}: {art?: Art}) {
                     <Label>
                         Titre
                         <Input 
-                            defaultValue={art?.title}
+                            defaultValue={artwork?.title}
                             name="title"
                             className="bg-white text-black"
                         />
@@ -58,7 +56,7 @@ export function ArtForm({art}: {art?: Art}) {
                     <Label>
                         Prix
                         <Input 
-                            defaultValue={art?.price}
+                            defaultValue={artwork?.price}
                             name="price"
                             className="bg-white text-black"
                         />

@@ -6,13 +6,12 @@ import { prisma } from '@/src/lib/prisma'
 import { DeleteArtButton } from './deleteArtButton'
 import { hasPermissions } from '@/src/lib/auth/permissions/permissions'
 import { auth } from '@/src/lib/auth/auth'
-// import { redirect } from 'next/navigation'
 import { UserRole } from '@prisma/client'
 
 export default async function Page() {
     const session = await auth()
     const role = session?.user?.role as UserRole
-     const arts = await prisma.art.findMany({
+     const artworks = await prisma.artwork.findMany({
         orderBy: {
             createdAt: "desc"
         }
@@ -20,18 +19,18 @@ export default async function Page() {
     return (
         <Card className='w-full rounded-2xl'>
             <CardContent className='flex flex-col w-full p-6 gap-4 bg-slate-400'>
-                { arts.map((art)=> 
-                    <Card className="flex items-start gap-4 p-4" key={art.id}>
+                { artworks.map((artwork)=> 
+                    <Card className="flex items-start gap-4 p-4" key={artwork.id}>
                         <div className='flex flex-col flex-1 gap-2'>
-                            <h2 className=''>{art.title}</h2>
-                            <p>{art.price}</p>
+                            <h2 className=''>{artwork.title}</h2>
+                            <p>{artwork.price}</p>
                         </div>
                         <div className="flex flex-col gap-2">
                             { hasPermissions(role, 'update:arts') &&<Link
-                                href={`admin/arts/${art.id}`}
+                                href={`admin/arts/${artwork.id}`}
                                 className={buttonVariants({size: "sm", variant: "outline"})}
                             >edit</Link>}
-                            { hasPermissions(role, 'delete:arts') && (<DeleteArtButton id={art.id}/>)}
+                            { hasPermissions(role, 'delete:arts') && (<DeleteArtButton id={artwork.id}/>)}
                         </div>
                         
                     </Card>

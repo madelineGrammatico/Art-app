@@ -9,15 +9,15 @@ type Pageprops = {params: Promise<{artId: string}>}
 
 export default async function page({params}: Pageprops) {
     const {artId} = await params
-    const art = await prisma.art.findFirst({
+    const artwork = await prisma.artwork.findFirst({
         where: {
-            id: Number(artId)
+            id: String(artId)
         }
     })
-    if (!art) return (
+    if (!artwork) return (
         <Card className='w-full'>
             <CardHeader>
-                <CardTitle>{`l'oeuvre avec l'id ${art} n'exixte pas`}</CardTitle>
+                <CardTitle>{`l'oeuvre avec l'id ${artwork} n'exixte pas`}</CardTitle>
             </CardHeader>
         </Card>
     )
@@ -29,7 +29,7 @@ export default async function page({params}: Pageprops) {
             >Home
             </Link>
 
-            <ArtForm art={art}/>
+            <ArtForm artwork={artwork}/>
         </div>
     )
 }

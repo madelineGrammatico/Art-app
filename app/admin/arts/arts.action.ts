@@ -3,20 +3,20 @@
 import { prisma } from "@/src/lib/prisma"
 import { redirect } from "next/navigation"
 
-export const createArtAction = async (art: {
+export const createArtAction = async (artwork: {
     title: string, 
     price: string
 }) => {
     try {
-        await prisma.art.create({
+        await prisma.artwork.create({
             data: {
-                title: art.title,
-                price: art.price
+                title: artwork.title,
+                price: artwork.price
             }
         })
     } catch {
         return {
-            error: "Error while creating the art"
+            error: "Error while creating the artwork"
         }
     }
    
@@ -24,23 +24,23 @@ export const createArtAction = async (art: {
 
 }
 
-export const editArtAction = async (id: number, art: {
+export const editArtAction = async (id: string, artwork: {
     title: string, 
     price: string
 }) => {
     try {
-        await prisma.art.update({
+        await prisma.artwork.update({
             where: {
                 id: id
             },
             data: {
-                title: art.title,
-                price: art.price
+                title: artwork.title,
+                price: artwork.price
             }
         })
     } catch {
         return {
-            error: "Error while creating the art"
+            error: "Error while creating the artwork"
         }
     }
    
@@ -48,8 +48,8 @@ export const editArtAction = async (id: number, art: {
 
 }
 
-export const deleteArtAction = async (id: number) => {
-    await prisma.art.delete({
+export const deleteArtAction = async (id: string) => {
+    await prisma.artwork.delete({
         where: {
             id: id
         }

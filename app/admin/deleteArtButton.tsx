@@ -4,7 +4,7 @@ import { useState } from "react"
 import { deleteArtAction } from "./arts/arts.action"
 import { useRouter } from "next/navigation"
 
-export  function DeleteArtButton({id}: {id: number}) {
+export  function DeleteArtButton({id}: {id: string}) {
     const [isConfirm, setIsConfirm] = useState(false)
     const router = useRouter()
 
