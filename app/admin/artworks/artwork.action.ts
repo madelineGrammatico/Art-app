@@ -8,19 +8,27 @@ export const createArtworkAction = async (artwork: {
     price: string
 }) => {
     try {
-        await prisma.artwork.create({
+        const newArtwork = await prisma.artwork.create({
             data: {
                 title: artwork.title,
                 price: artwork.price
             }
         })
+        const newcertificate = await prisma.certificate.create({
+            data: {
+                artworkId: newArtwork.id,
+                isssueDate: new Date(Date.now()),
+                content: "certificat de test"
+            }
+        })
+        console.log("newcertificate : ", newcertificate)
     } catch {
         return {
             error: "Error while creating the artwork"
         }
     }
    
-    redirect("/")
+    redirect("/admin")
 
 }
 
