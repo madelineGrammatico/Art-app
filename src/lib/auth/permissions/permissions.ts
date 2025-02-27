@@ -4,10 +4,25 @@ type Permissions = (typeof PERMISSIONS)[UserRole][number]
 
 const PERMISSIONS = {
     ADMIN: [
-        "view:arts",
-        "create:arts",
-        "update:arts",
-        "delete:arts",
+        "view:artworks",
+        "create:artworks",
+        "update:artworks",
+        "delete:artworks",
+
+        "view:certificate",
+        "create:certificate",
+        "update:certificate",
+        "delete:certificate",
+
+        "view:invoice",
+        "create:invoice",
+        "update:invoice",
+        "delete:invoice",
+
+        "view:purchase",
+        "create:purchase",
+        "update:purchase",
+        "delete:purchase",
 
         "view:basket",
         "create:basket",
@@ -15,7 +30,16 @@ const PERMISSIONS = {
         "delete:basket",
     ],
     CLIENT: [
-        "view:arts",
+        "view:ownCertificate",
+        "create:certificate",
+
+        "view:ownInvoice",
+        "create:invoice",
+
+        "view:ownPurchase",
+        "create:purchase",
+        "update:ownPurchase",
+        "delete:ownPurchase",
 
         "view:ownBasket",
         "create:basket",

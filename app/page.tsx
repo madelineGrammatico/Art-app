@@ -4,7 +4,7 @@ import { prisma } from "@/src/lib/prisma";
 import Link from "next/link";
 
 export default async function Home() {
-  const arts = await prisma.artwork.findMany({
+  const artworks = await prisma.artwork.findMany({
     orderBy: {
       createdAt: "desc"
     }
@@ -12,7 +12,7 @@ export default async function Home() {
   return (
     <div className="flex flex-col gap-4 w-full">
       <div className="flex flex-col gap-4 w-full">  
-        { arts.map((artwork)=> 
+        { artworks.map((artwork)=> 
           <Link
             href={`/preview/${artwork.id}`}
             key={artwork.id}

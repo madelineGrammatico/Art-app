@@ -4,24 +4,24 @@ import Form from 'next/form'
 import { Input } from '@/src/components/ui/input' 
 import { Button } from '@/src/components/ui/button'
 import { useFormStatus } from 'react-dom'
-import { createArtAction, editArtAction } from './arts.action' 
+import { createArtworkAction, editArtworkAction } from './artwork.action' 
 import React from 'react'
 import { Header } from '@/src/components/Header'
 import { Card } from '@/src/components/ui/card'
 import { Artwork } from '@prisma/client'
 
-export function ArtForm({artwork}: {artwork?: Artwork}) {
+export function ArtworkForm({artwork}: {artwork?: Artwork}) {
   
     const onSubmit = async (FormData: FormData) => {
         let error: null | string = null
         if(artwork) {
-            const json = await editArtAction(artwork.id, {
+            const json = await editArtworkAction(artwork.id, {
                 title: String(FormData.get('title')),
                 price: String(FormData.get('price'))
             })
             error= json.error
         } else {
-            const json = await createArtAction({
+            const json = await createArtworkAction({
                 title: String(FormData.get('title')),
                 price: String(FormData.get('price'))
             })

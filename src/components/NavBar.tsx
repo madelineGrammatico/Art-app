@@ -53,12 +53,12 @@ export default function NavBar() {
           <MenubarContent className="bg-slate-400 text-white">
           <MenubarItem>
             <Link href="/admin">
-              Arts
+              Artworks
             </Link>
           </MenubarItem>
           <MenubarItem>
-            <Link href="/admin/arts/new">
-              New Art
+            <Link href="/admin/artworks/new">
+              New Artwork
             </Link>
           </MenubarItem>
           </MenubarContent>

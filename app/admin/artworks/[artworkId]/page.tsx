@@ -1,16 +1,17 @@
 import { buttonVariants } from '@/src/components/ui/button'
-import { Card, CardContent, CardHeader, CardTitle } from '@/src/components/ui/card'
+import { Card, CardHeader, CardTitle } from '@/src/components/ui/card'
 import { prisma } from '@/src/lib/prisma'
 import Link from 'next/link'
 import React from 'react'
+import { ArtworkForm } from '../artworkForm'
 
-type Pageprops = {params: Promise<{artId: string}>}
+type Pageprops = {params: Promise<{artworkId: string}>}
 
 export default async function page({params}: Pageprops) {
-    const {artId} = await params
+    const {artworkId} = await params
     const artwork = await prisma.artwork.findFirst({
         where: {
-            id: Number(artId)
+            id: String(artworkId)
         }
     })
     if (!artwork) return (
@@ -21,21 +22,14 @@ export default async function page({params}: Pageprops) {
         </Card>
     )
     return (
-        <div className='flex flex-col w-full py-4 gap-4'>
+        <div className='flex flex-col w-full p-4 gap-4'>
             <Link
                 href="/"
                 className={buttonVariants({size:"lg", variant:"secondary"})}
             >Home
             </Link>
 
-            <Card className='w-full'>
-                <CardHeader>
-                    <CardTitle>{artwork.title}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                    {artwork.price}
-                </CardContent>
-            </Card>
+            <ArtworkForm artwork={artwork}/>
         </div>
     )
 }

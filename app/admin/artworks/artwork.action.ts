@@ -3,7 +3,7 @@
 import { prisma } from "@/src/lib/prisma"
 import { redirect } from "next/navigation"
 
-export const createArtAction = async (artwork: {
+export const createArtworkAction = async (artwork: {
     title: string, 
     price: string
 }) => {
@@ -24,7 +24,7 @@ export const createArtAction = async (artwork: {
 
 }
 
-export const editArtAction = async (id: string, artwork: {
+export const editArtworkAction = async (id: string, artwork: {
     title: string, 
     price: string
 }) => {
@@ -48,7 +48,7 @@ export const editArtAction = async (id: string, artwork: {
 
 }
 
-export const deleteArtAction = async (id: string) => {
+export const deleteArtworkAction = async (id: string) => {
     await prisma.artwork.delete({
         where: {
             id: id
@@ -56,6 +56,6 @@ export const deleteArtAction = async (id: string) => {
     })
 
     return {
-        message: "Art deleted"
+        message: "Artwork deleted"
     }
 }

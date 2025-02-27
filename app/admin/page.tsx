@@ -3,7 +3,7 @@ import { Card, CardContent} from '@/src/components/ui/card'
 import Link from 'next/link'
 import { buttonVariants } from '@/src/components/ui/button'
 import { prisma } from '@/src/lib/prisma'
-import { DeleteArtButton } from './deleteArtButton'
+import { DeleteArtworkButton } from './deleteArtworkButton' 
 import { hasPermissions } from '@/src/lib/auth/permissions/permissions'
 import { auth } from '@/src/lib/auth/auth'
 import { UserRole } from '@prisma/client'
@@ -14,7 +14,8 @@ export default async function Page() {
      const artworks = await prisma.artwork.findMany({
         orderBy: {
             createdAt: "desc"
-        }
+        },
+        // include:{certificate:true}
     })
     return (
         <Card className='w-full rounded-2xl'>
@@ -26,17 +27,23 @@ export default async function Page() {
                             <p>{artwork.price}</p>
                         </div>
                         <div className="flex flex-col gap-2">
-                            { hasPermissions(role, 'update:arts') &&<Link
-                                href={`admin/arts/${artwork.id}`}
+
+                            { hasPermissions(role, 'update:artworks') &&<Link
+                                href={`admin/artworks/${artwork.id}`}
                                 className={buttonVariants({size: "sm", variant: "outline"})}
                             >edit</Link>}
-                            { hasPermissions(role, 'delete:arts') && (<DeleteArtButton id={artwork.id}/>)}
+
+                            {/* { hasPermissions(role, 'update:artworks') && artwork.certificate ?
+                                <><Button>Voir certificat</Button><Button>Modifier certificat</Button></>
+                                : <Button>Ajouter certificat</Button> } */}
+
+                            { hasPermissions(role, 'delete:artworks') && (<DeleteArtworkButton id={artwork.id}/>) }
                         </div>
                         
                     </Card>
                 )}
                 <Link 
-                    href="/admin/arts/new"
+                    href="/admin/artworks/newArtwork"
                     className={buttonVariants({size:"lg"})} 
                 >
                     Ajouter une nouvelle oeuvre

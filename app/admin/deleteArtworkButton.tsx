@@ -1,15 +1,15 @@
 "use client"
 import { Button } from "@/src/components/ui/button"
 import { useState } from "react"
-import { deleteArtAction } from "./arts/arts.action"
+import { deleteArtworkAction } from "./artworks/artwork.action"
 import { useRouter } from "next/navigation"
 
-export  function DeleteArtButton({id}: {id: string}) {
+export  function DeleteArtworkButton({id}: {id: string}) {
     const [isConfirm, setIsConfirm] = useState(false)
     const router = useRouter()
 
     const handleDelete = async () => {
-        const result = await deleteArtAction(id)
+        const result = await deleteArtworkAction(id)
         if (result) {
           router.refresh()
         }
