@@ -14,14 +14,13 @@ export const createArtworkAction = async (artwork: {
                 price: artwork.price
             }
         })
-        const newcertificate = await prisma.certificate.create({
+        await prisma.certificate.create({
             data: {
                 artworkId: newArtwork.id,
                 isssueDate: new Date(Date.now()),
                 content: "certificat de test"
             }
         })
-        console.log("newcertificate : ", newcertificate)
     } catch {
         return {
             error: "Error while creating the artwork"
@@ -29,7 +28,6 @@ export const createArtworkAction = async (artwork: {
     }
    
     redirect("/admin")
-
 }
 
 export const editArtworkAction = async (id: string, artwork: {
@@ -48,12 +46,11 @@ export const editArtworkAction = async (id: string, artwork: {
         })
     } catch {
         return {
-            error: "Error while creating the artwork"
+            error: "Error while editing the artwork"
         }
     }
    
     redirect("/admin")
-
 }
 
 export const deleteArtworkAction = async (id: string) => {
