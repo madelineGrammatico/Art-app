@@ -1,7 +1,7 @@
 import React from 'react'
 import { Card, CardContent} from '@/src/components/ui/card'
 import Link from 'next/link'
-import { buttonVariants } from '@/src/components/ui/button'
+import { Button, buttonVariants } from '@/src/components/ui/button'
 import { prisma } from '@/src/lib/prisma'
 import { DeleteArtworkButton } from './deleteArtworkButton' 
 import { hasPermissions } from '@/src/lib/auth/permissions/permissions'
@@ -15,7 +15,7 @@ export default async function Page() {
         orderBy: {
             createdAt: "desc"
         },
-        // include:{certificate:true}
+        include:{certificate:true}
     })
     return (
         <Card className='w-full rounded-2xl'>
@@ -33,9 +33,8 @@ export default async function Page() {
                                 className={buttonVariants({size: "sm", variant: "outline"})}
                             >edit</Link>}
 
-                            {/* { hasPermissions(role, 'update:artworks') && artwork.certificate ?
-                                <><Button>Voir certificat</Button><Button>Modifier certificat</Button></>
-                                : <Button>Ajouter certificat</Button> } */}
+                            { hasPermissions(role, 'update:artworks') && artwork.certificate &&
+                                <><Button>Voir certificat</Button><Button>Modifier certificat</Button></> }
 
                             { hasPermissions(role, 'delete:artworks') && (<DeleteArtworkButton id={artwork.id}/>) }
                         </div>
