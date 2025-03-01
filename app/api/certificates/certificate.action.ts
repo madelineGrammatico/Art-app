@@ -9,7 +9,8 @@ export const editCertificateAction = async({artworkId, content}: {artworkId:stri
             where: { id: artworkId },
             include: {invoice: true}
         })
-        if(artwork?.invoice) 
+        if(!artwork) throw new Error
+        if(artwork.invoice.length >= 1) 
         throw Error("L'oeuvre à déjà été vendue, toutes modifications du certificat est impossible")
 
         await prisma.certificate.update({
