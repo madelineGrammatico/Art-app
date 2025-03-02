@@ -1,10 +1,10 @@
-import { Header } from "@/src/components/Header";
+// import { Header } from "@/src/components/Header";
 import { buttonVariants } from "@/src/components/ui/button";
 import { prisma } from "@/src/lib/prisma";
 import Link from "next/link";
 
 export default async function Home() {
-  const arts = await prisma.art.findMany({
+  const artworks = await prisma.artwork.findMany({
     orderBy: {
       createdAt: "desc"
     }
@@ -12,13 +12,13 @@ export default async function Home() {
   return (
     <div className="flex flex-col gap-4 w-full">
       <div className="flex flex-col gap-4 w-full">  
-        { arts.map((art)=> 
+        { artworks.map((artwork)=> 
           <Link
-            href={`/preview/${art.id}`}
-            key={art.id}
+            href={`/preview/${artwork.id}`}
+            key={artwork.id}
             className={buttonVariants({size:"lg", variant:"secondary"})} 
           >
-            {art.title}
+            {artwork.title}
           </Link>
         )}  
         

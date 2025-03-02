@@ -4,19 +4,19 @@ import { prisma } from '@/src/lib/prisma'
 import Link from 'next/link'
 import React from 'react'
 
-type Pageprops = {params: Promise<{artId: string}>}
+type Pageprops = {params: Promise<{artworkId: string}>}
 
 export default async function page({params}: Pageprops) {
-    const {artId} = await params
-    const art = await prisma.art.findFirst({
+    const {artworkId} = await params
+    const artwork = await prisma.artwork.findFirst({
         where: {
-            id: Number(artId)
+            id: String(artworkId)
         }
     })
-    if (!art) return (
+    if (!artwork) return (
         <Card className='w-full'>
             <CardHeader>
-                <CardTitle>{`l'oeuvre avec l'id ${art} n'exixte pas`}</CardTitle>
+                <CardTitle>{`l'oeuvre avec l'id ${artwork} n'exixte pas`}</CardTitle>
             </CardHeader>
         </Card>
     )
@@ -30,10 +30,10 @@ export default async function page({params}: Pageprops) {
 
             <Card className='w-full'>
                 <CardHeader>
-                    <CardTitle>{art.title}</CardTitle>
+                    <CardTitle>{artwork.title}</CardTitle>
                 </CardHeader>
                 <CardContent>
-                    {art.price}
+                    {artwork.price}
                 </CardContent>
             </Card>
         </div>

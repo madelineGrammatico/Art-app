@@ -10,13 +10,13 @@ export async function GET() {
 export async function POST(request: NextRequest) {
     const json = await request.json()
 
-    const newArt = await prisma.art.create({
+    const newArtwork = await prisma.artwork.create({
         data: {
             title: json.title,
             price: json.price
         }
     })
     return NextResponse.json({
-        art: newArt
+        artwork: newArtwork
     })
 }
