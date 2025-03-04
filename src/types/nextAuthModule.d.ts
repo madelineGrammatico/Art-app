@@ -6,16 +6,20 @@ declare module "next-auth" {
     firstName?: string | null
     lastName?: string | null
     role: UserRole
+    accessToken?: string
+    refreshToken?: string
   }
   
-
   interface Session extends DefaultSession{
     user: User & DefaultSession["user"]
+    accessToken?: string
+    error?: string
   }
-  
-  interface JWT {
-    firstName?: string | null
-    lastName?: string | null
-    role: UserRole
-  }
+}
+
+declare module "next-auth/jwt" {
+  interface JWT extends Partial<Pick<User,"refreshToken" | "id"| "email"| "role">> {
+  accessTokenExpires: number
+  error?: string
+  } 
 }
