@@ -8,7 +8,7 @@ import bcrypt from "bcryptjs"
 import { v4 as uuid } from "uuid"
 import { encode as defaultEncode } from "next-auth/jwt"
 import { UserRole } from "@prisma/client"
-import { signAccessToken, signRefreshToken } from "../tokens/tokens"
+import { refreshAccessToken, signAccessToken, signRefreshToken } from "../tokens/tokens"
 
 const adapter = PrismaAdapter(prisma)
 
@@ -83,7 +83,12 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         if (account?.provider=== "credentials") {
             token.credentials = true 
         }
-        return token
+        if (Date.now() < token.accessTokenExpires) {
+          return token;
+        }
+  
+        return await refreshAccessToken(token);
+        
     },
     async session({session, token}) {
         if (token) {
