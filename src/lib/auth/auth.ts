@@ -124,4 +124,15 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
       return defaultEncode(params);
     },
   },
+  cookies: {
+    sessionToken: {
+      name: `__Secure-next-auth.session-token`,
+      options: {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+      },
+    },
+  },
 })
