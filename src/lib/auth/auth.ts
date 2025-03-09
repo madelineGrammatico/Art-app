@@ -8,6 +8,7 @@ import bcrypt from "bcryptjs"
 import { v4 as uuid } from "uuid"
 import { encode as defaultEncode } from "next-auth/jwt"
 import { UserRole } from "@prisma/client"
+import { refreshAccessToken, signAccessToken, signRefreshToken } from "../tokens/tokens"
 
 const adapter = PrismaAdapter(prisma)
 
@@ -24,7 +25,7 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
           firstName: profile.given_name,
           lastName: profile.family_name,
           email: profile.email,
-          role: profile.role,
+          role: "CLIENT",
           image: profile.picture
         }
       }
@@ -53,7 +54,18 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         const passwordMatch = await bcrypt.compare(validatedCredentials.password, user.password);
         if (!passwordMatch) throw new Error("Mot de passe incorrect");
         
-        return user
+        const accessToken = signAccessToken(user)
+        const refreshToken = signRefreshToken(user)
+
+        await prisma.refreshToken.create({
+          data: {
+            token: refreshToken,
+            userId: user.id,
+            expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+          },
+        })
+
+        return { ...user, accessToken, refreshToken }
       }
     })
   ],
@@ -64,11 +76,19 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         token.firstName = user.firstName 
         token.lastName = user.lastName
         token.role = user.role
+        token.accessToken = user.accessToken;
+        token.refreshToken = user.refreshToken;
+        token.accessTokenExpires = Date.now() + 15 * 60 * 1000;
       }
         if (account?.provider=== "credentials") {
             token.credentials = true 
         }
-        return token
+        if (Date.now() < token.accessTokenExpires) {
+          return token;
+        }
+  
+        return await refreshAccessToken(token);
+        
     },
     async session({session, token}) {
         if (token) {
@@ -102,6 +122,17 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         return sessionToken;
       }
       return defaultEncode(params);
+    },
+  },
+  cookies: {
+    sessionToken: {
+      name: `__Secure-next-auth.session-token`,
+      options: {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === "production",
+        sameSite: "lax",
+        path: "/",
+      },
     },
   },
 })
