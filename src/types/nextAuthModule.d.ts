@@ -10,7 +10,7 @@ declare module "next-auth" {
     refreshToken?: string
   }
   
-  interface Session extends DefaultSession{
+  interface Session{
     user: User & DefaultSession["user"]
     accessToken?: string
     error?: string
