@@ -4,6 +4,9 @@ import { prisma } from '../prisma'
 import { JWT } from 'next-auth/jwt'
 
 const SECRET_KEY = process.env.JWT_SECRET!
+if (!SECRET_KEY) {
+  throw new Error("JWT_SECRET is not defined in the environment variables");
+}
 
 export function signAccessToken(user: Partial<Pick<User, "id"| "email"| "role">>) {
   return jwt.sign({ id: user.id, email: user.email, role: user.role }, SECRET_KEY, { expiresIn: '15m' })
