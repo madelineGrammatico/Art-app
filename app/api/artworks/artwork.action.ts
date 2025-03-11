@@ -1,5 +1,6 @@
 "use server"
 
+import { auth } from "@/src/lib/auth/auth"
 import { prisma } from "@/src/lib/prisma"
 import { redirect } from "next/navigation"
 
@@ -8,6 +9,14 @@ export const createArtworkAction = async (artwork: {
     price: string
 }) => {
     try {
+        const session = await auth()
+        if (
+            !session 
+            || !session.user 
+            || !session.accessToken
+            || session.user.role !== "ADMIN"
+        ) throw new Error("non authorisé")
+
         const newArtwork = await prisma.artwork.create({
             data: {
                 title: artwork.title,
@@ -35,6 +44,14 @@ export const editArtworkAction = async (id: string, artwork: {
     price: string
 }) => {
     try {
+        const session = await auth()
+        if (
+            !session 
+            || !session.user 
+            || !session.accessToken
+            || session.user.role !== "ADMIN"
+        ) throw new Error("non authorisé")
+
         await prisma.artwork.update({
             where: {
                 id: id
@@ -54,13 +71,24 @@ export const editArtworkAction = async (id: string, artwork: {
 }
 
 export const deleteArtworkAction = async (id: string) => {
-    await prisma.artwork.delete({
-        where: {
-            id: id
+    try{const session = await auth()
+        if (
+            !session 
+            || !session.user 
+            || !session.accessToken
+            || session.user.role !== "ADMIN"
+        ) throw new Error("non authorisé")
+    
+        await prisma.artwork.delete({
+            where: {
+                id: id
+            }
+        })
+    
+        return {
+            message: "Artwork deleted"
         }
-    })
-
-    return {
-        message: "Artwork deleted"
+    } catch(error) {
+        return(error)
     }
 }

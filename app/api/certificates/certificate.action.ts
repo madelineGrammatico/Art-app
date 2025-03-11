@@ -7,12 +7,12 @@ import { redirect } from "next/navigation"
 export const editCertificateAction = async({artworkId, content}: {artworkId:string, content: string}) => {
     try{
         const session = await auth()
-                if (
-                    !session 
-                    || !session.user 
-                    || !session.accessToken
-                    || session.user.role !== "ADMIN"
-                ) throw new Error("non authorisé")
+            if (
+                !session 
+                || !session.user 
+                || !session.accessToken
+                || session.user.role !== "ADMIN"
+            ) throw new Error("non authorisé")
                 
         const artwork = await prisma.artwork.findUnique({ 
             where: { id: artworkId },
