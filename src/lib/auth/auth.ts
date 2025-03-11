@@ -80,15 +80,14 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         token.refreshToken = user.refreshToken;
         token.accessTokenExpires = Date.now() + 15 * 60 * 1000;
       }
-        if (account?.provider=== "credentials") {
-            token.credentials = true 
-        }
-        if (Date.now() < token.accessTokenExpires) {
-          return token;
-        }
-  
-        return await refreshAccessToken(token);
-        
+      if (account?.provider === "credentials") {
+        token.credentials = true 
+      }
+      if (Date.now() < token.accessTokenExpires) {
+        return token;
+      }
+      
+      return await refreshAccessToken(token)
     },
     async session({session, token}) {
         if (token) {
@@ -126,7 +125,9 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
   },
   cookies: {
     sessionToken: {
-      name: `__Secure-next-auth.session-token`,
+      name: process.env.NODE_ENV === "production" 
+        ? "__Secure-next-auth.session-token" 
+        : "next-auth.session-token",
       options: {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",
