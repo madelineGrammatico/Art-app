@@ -10,12 +10,22 @@ export const createArtworkAction = async (artwork: {
 }) => {
     try {
         const session = await auth()
+        console.log("session : ",session)
         if (
-            !session 
-            || !session.user 
-            || !session.accessToken
-            || session.user.role !== "ADMIN"
-        ) throw new Error("non authorisé")
+            !session ){
+                console.log("BUUUUUGGGGGG !session !!!!!!")
+                throw new Error("non authorisé")
+            } if (!session?.user ) {
+                console.log("BUUUUUGGGGGG  !session.user !!!!!!")
+                throw new Error("non authorisé")
+            } if (!session?.sessionToken) {
+                console.log("BUUUUUGGGGGG !session?.accessToken !!!!!!")
+                throw new Error("non authorisé")
+            } if (session?.user.role !== "ADMIN") {
+                console.log("BUUUUUGGGGGG session?.user.role !== 'ADMIN '!!!!!!")
+                throw new Error("non authorisé")
+            }
+         else {console.log("session ok")}
 
         const newArtwork = await prisma.artwork.create({
             data: {
@@ -30,7 +40,8 @@ export const createArtworkAction = async (artwork: {
                 content: "certificat de test"
             }
         })
-    } catch {
+    } catch(error) {
+        console.log(error)
         return {
             error: "Error while creating the artwork"
         }
@@ -46,11 +57,18 @@ export const editArtworkAction = async (id: string, artwork: {
     try {
         const session = await auth()
         if (
-            !session 
-            || !session.user 
-            || !session.accessToken
-            || session.user.role !== "ADMIN"
-        ) throw new Error("non authorisé")
+            !session ){
+                console.log("BUUUUUGGGGGG !session !!!!!!")
+            } if (!session?.user ) {
+                console.log("BUUUUUGGGGGG  !session.user !!!!!!")
+            } if (!session?.sessionToken) {
+                console.log("BUUUUUGGGGGG !session?.accessToken !!!!!!")
+            } if (session?.user.role !== "ADMIN") {
+                console.log("BUUUUUGGGGGG session?.user.role !== 'ADMIN '!!!!!!")
+            }
+        // {console.log("BUUUUUGGGGGG !!!!!!")
+        //     throw new Error("non authorisé")}
+         else {console.log("session ok")}
 
         await prisma.artwork.update({
             where: {
@@ -71,14 +89,15 @@ export const editArtworkAction = async (id: string, artwork: {
 }
 
 export const deleteArtworkAction = async (id: string) => {
-    try{const session = await auth()
+   const session = await auth()
         if (
             !session 
             || !session.user 
-            || !session.accessToken
+            || !session.sessionToken
             || session.user.role !== "ADMIN"
-        ) throw new Error("non authorisé")
-    
+        ) throw Error("non authorisé")
+        
+        delete
         await prisma.artwork.delete({
             where: {
                 id: id
@@ -88,7 +107,5 @@ export const deleteArtworkAction = async (id: string) => {
         return {
             message: "Artwork deleted"
         }
-    } catch(error) {
-        return(error)
-    }
+    
 }
