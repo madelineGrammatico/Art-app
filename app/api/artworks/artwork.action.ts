@@ -68,7 +68,7 @@ export const editArtworkAction = async (id: string, artwork: {
             }
         // {console.log("BUUUUUGGGGGG !!!!!!")
         //     throw new Error("non authorisé")}
-         else {console.log("session ok")}
+        else {console.log("session ok")}
 
         await prisma.artwork.update({
             where: {

@@ -9,17 +9,19 @@ if (!SECRET_KEY) {
 }
 
 export function signAccessToken(user: Partial<Pick<User, "id"| "email"| "role">>) {
-  return jwt.sign({ id: user.id, email: user.email, role: user.role }, SECRET_KEY, { expiresIn: '15m' })
+  const accessToken = jwt.sign({ id: user.id, email: user.email, role: user.role }, SECRET_KEY, { expiresIn: '15m' })
+  // const accessTokenExpires= Date.now() + 15 * 60 * 1000
+  return {accessToken}
 }
 
-export function signRefreshToken(user: User) {
+export function signRefreshToken(user: Omit<User, "password">) {
   return jwt.sign({ id: user.id }, SECRET_KEY, { expiresIn: '7d' })
 }
 
 export function verifyToken(token: string) {
   return jwt.verify(token, SECRET_KEY)
 }
-export async function refreshAccessToken(token: JWT) {
+export async function refreshAccessToken(token:JWT) {
   try {
     if (!token.refreshToken ) throw new Error('Refresh token is missing');
     const existingToken = await prisma.refreshToken.findUnique({
