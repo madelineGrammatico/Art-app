@@ -57,7 +57,7 @@ export default function NavBar() {
             </Link>
           </MenubarItem>
           <MenubarItem>
-            <Link href="/admin/artworks/new">
+            <Link href="/admin/artworks/newArtwork">
               New Artwork
             </Link>
           </MenubarItem>

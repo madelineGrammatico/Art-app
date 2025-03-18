@@ -1,5 +1,6 @@
 "use server"
 
+import { auth } from "@/src/lib/auth/auth"
 import { prisma } from "@/src/lib/prisma"
 import { redirect } from "next/navigation"
 
@@ -8,6 +9,13 @@ export const createArtworkAction = async (artwork: {
     price: string
 }) => {
     try {
+        const session = await auth()
+        if (!session 
+            ||!session?.user 
+            ||!session?.sessionToken 
+            || session?.user.role !== "ADMIN"
+        ) throw new Error("non authorisé")
+        
         const newArtwork = await prisma.artwork.create({
             data: {
                 title: artwork.title,
@@ -21,7 +29,8 @@ export const createArtworkAction = async (artwork: {
                 content: "certificat de test"
             }
         })
-    } catch {
+    } catch(error) {
+        console.log(error)
         return {
             error: "Error while creating the artwork"
         }
@@ -35,6 +44,13 @@ export const editArtworkAction = async (id: string, artwork: {
     price: string
 }) => {
     try {
+        const session = await auth()
+        if (!session 
+            ||!session?.user 
+            ||!session?.sessionToken 
+            || session?.user.role !== "ADMIN"
+        ) throw new Error("non authorisé")
+
         await prisma.artwork.update({
             where: {
                 id: id
@@ -54,13 +70,23 @@ export const editArtworkAction = async (id: string, artwork: {
 }
 
 export const deleteArtworkAction = async (id: string) => {
-    await prisma.artwork.delete({
-        where: {
-            id: id
+   const session = await auth()
+        if (
+            !session 
+            || !session.user 
+            || !session.sessionToken
+            || session.user.role !== "ADMIN"
+        ) throw Error("non authorisé")
+        
+        delete
+        await prisma.artwork.delete({
+            where: {
+                id: id
+            }
+        })
+    
+        return {
+            message: "Artwork deleted"
         }
-    })
-
-    return {
-        message: "Artwork deleted"
-    }
+    
 }

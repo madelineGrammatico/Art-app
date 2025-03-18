@@ -5,10 +5,11 @@ import { prisma } from "../prisma"
 import { PrismaAdapter } from "@auth/prisma-adapter"
 import { credentialShema } from "../shema"
 import bcrypt from "bcryptjs"
-import { v4 as uuid } from "uuid"
+// import { v4 as uuid } from "uuid"
 import { encode as defaultEncode } from "next-auth/jwt"
 import { UserRole } from "@prisma/client"
 import { refreshAccessToken, signAccessToken, signRefreshToken } from "../tokens/tokens"
+import { exclude } from "../utils"
 
 const adapter = PrismaAdapter(prisma)
 
@@ -54,8 +55,9 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         const passwordMatch = await bcrypt.compare(validatedCredentials.password, user.password);
         if (!passwordMatch) throw new Error("Mot de passe incorrect");
         
-        const accessToken = signAccessToken(user)
-        const refreshToken = signRefreshToken(user)
+        const userSafe = exclude(user, ["password"])
+        const {accessToken} = signAccessToken(userSafe)
+        const refreshToken = signRefreshToken(userSafe)
 
         await prisma.refreshToken.create({
           data: {
@@ -64,8 +66,8 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
             expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
           },
         })
-
-        return { ...user, accessToken, refreshToken }
+        
+        return { ...userSafe, accessToken, refreshToken }
       }
     })
   ],
@@ -79,31 +81,38 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         token.accessToken = user.accessToken;
         token.refreshToken = user.refreshToken;
         token.accessTokenExpires = Date.now() + 15 * 60 * 1000;
+      } else{ throw new Error("pas d'utilisateur trouvé")}
+      
+      if (account?.provider === "credentials") {
+        token.credentials = true 
       }
-        if (account?.provider=== "credentials") {
-            token.credentials = true 
-        }
-        if (Date.now() < token.accessTokenExpires) {
-          return token;
-        }
-  
-        return await refreshAccessToken(token);
-        
+      if (Date.now() < token.accessTokenExpires) {
+        const tokenSafe = exclude(token, ["password"])
+        return tokenSafe;
+      }
+      const tokenSafe = exclude(token, ["password"])
+      const returnToken = await refreshAccessToken(tokenSafe)
+      return returnToken
     },
     async session({session, token}) {
-        if (token) {
-          session.user.id = token.id as string
-          session.user.firstName = token.firstName as string
-          session.user.lastName = token.lastName as string
-          session.user.role = token.role as UserRole
-        }
+      if (token) {
+        session.user.id = token.id as string
+        session.user.firstName = token.firstName as string
+        session.user.lastName = token.lastName as string
+        session.user.role = token.role as UserRole
+        session.accessToken = token.accessToken as string
+        session.accessTokenExpires = token.accessTokenExpires
+      }
+      let userSessionSafe = session.user
+      userSessionSafe = exclude(session.user, ["password"])
+      session.user = userSessionSafe
       return session
     }
   },
   jwt: {
     encode: async function (params) {
       if (params.token?.credentials) {
-        const sessionToken = uuid();
+        const sessionToken = params.token.accessToken as string
 
         if (!params.token.sub) {
           throw new Error("No user ID found in token");
@@ -114,11 +123,10 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
           userId: params.token.sub,
           expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
         });
-
+        
         if (!createdSession) {
           throw new Error("Failed to create session");
         }
-
         return sessionToken;
       }
       return defaultEncode(params);
@@ -126,7 +134,9 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
   },
   cookies: {
     sessionToken: {
-      name: `__Secure-next-auth.session-token`,
+      name: process.env.NODE_ENV === "production" 
+        ? "__Secure-next-auth.session-token" 
+        : "next-auth.session-token",
       options: {
         httpOnly: true,
         secure: process.env.NODE_ENV === "production",

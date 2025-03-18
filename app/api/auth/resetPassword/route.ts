@@ -7,7 +7,6 @@ import { z } from "zod";
 export async function POST(request: Request) {
     try {
         const body = await request.json()
-        console.log(body)
         const {token, password} = resetPassordSchema.parse(body)
 
         const passwordResetToken = await prisma.passwordResetToken.findFirst({

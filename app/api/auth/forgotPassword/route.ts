@@ -9,7 +9,6 @@ import { sendResetPasswordEmail } from "@/src/lib/mail/resetPawordMail";
 export async function POST(request: Request) {
     try {
         const body = await request.json()
-        console.log(body)
         const { email } = forgotPasswordSchema.parse(body)
 
         const user = await prisma.user.findUnique({ 
@@ -35,7 +34,7 @@ export async function POST(request: Request) {
         })
 
         const resResend = await sendResetPasswordEmail(email, token)
-        console.log(resResend)
+        if(resResend.error) {throw new Error(resResend.error.message)}
         return NextResponse.json({ message: "Email de reinitialisation envoyé"})
 
     } catch(error) {
