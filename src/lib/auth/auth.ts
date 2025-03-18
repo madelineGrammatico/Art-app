@@ -56,8 +56,6 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         if (!passwordMatch) throw new Error("Mot de passe incorrect");
         
         const userSafe = exclude(user, ["password"])
-        // const { password, ...userWithoutPassword } = user
-        console.log("userWihoutPassword : ", userSafe)
         const {accessToken} = signAccessToken(userSafe)
         const refreshToken = signRefreshToken(userSafe)
 
@@ -75,9 +73,6 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
   ],
   callbacks: {
     async jwt({token, account, user}) {
-      console.log("callbacks.jwt : user", user)
-      console.log("callbacks.jwt : account", account)
-      console.log("callbacks.jwt : token befoe update", token)
       if (user) {
         token.id = user.id;
         token.firstName = user.firstName 
@@ -93,17 +88,13 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
       }
       if (Date.now() < token.accessTokenExpires) {
         const tokenSafe = exclude(token, ["password"])
-        console.log("callbacks.jwt : return token", tokenSafe)
         return tokenSafe;
       }
       const tokenSafe = exclude(token, ["password"])
       const returnToken = await refreshAccessToken(tokenSafe)
-      console.log("callbacks.jwt : returnToken", returnToken)
       return returnToken
     },
     async session({session, token}) {
-      console.log("callbacks.session : token", token)
-      console.log("callbacks.session : session", session)
       if (token) {
         session.user.id = token.id as string
         session.user.firstName = token.firstName as string
@@ -115,13 +106,11 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
       let userSessionSafe = session.user
       userSessionSafe = exclude(session.user, ["password"])
       session.user = userSessionSafe
-      console.log("callbacks.session : return session", session)
       return session
     }
   },
   jwt: {
     encode: async function (params) {
-      console.log("jwt.encode : params : ", params)
       if (params.token?.credentials) {
         const sessionToken = params.token.accessToken as string
 
@@ -138,7 +127,6 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         if (!createdSession) {
           throw new Error("Failed to create session");
         }
-        console.log("jwt.encode : created session :", createdSession)
         return sessionToken;
       }
       return defaultEncode(params);

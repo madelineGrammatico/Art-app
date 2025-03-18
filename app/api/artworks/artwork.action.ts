@@ -10,23 +10,12 @@ export const createArtworkAction = async (artwork: {
 }) => {
     try {
         const session = await auth()
-        console.log("session : ",session)
-        if (
-            !session ){
-                console.log("BUUUUUGGGGGG !session !!!!!!")
-                throw new Error("non authorisé")
-            } if (!session?.user ) {
-                console.log("BUUUUUGGGGGG  !session.user !!!!!!")
-                throw new Error("non authorisé")
-            } if (!session?.sessionToken) {
-                console.log("BUUUUUGGGGGG !session?.accessToken !!!!!!")
-                throw new Error("non authorisé")
-            } if (session?.user.role !== "ADMIN") {
-                console.log("BUUUUUGGGGGG session?.user.role !== 'ADMIN '!!!!!!")
-                throw new Error("non authorisé")
-            }
-         else {console.log("session ok")}
-
+        if (!session 
+            ||!session?.user 
+            ||!session?.sessionToken 
+            || session?.user.role !== "ADMIN"
+        ) throw new Error("non authorisé")
+        
         const newArtwork = await prisma.artwork.create({
             data: {
                 title: artwork.title,
@@ -56,19 +45,11 @@ export const editArtworkAction = async (id: string, artwork: {
 }) => {
     try {
         const session = await auth()
-        if (
-            !session ){
-                console.log("BUUUUUGGGGGG !session !!!!!!")
-            } if (!session?.user ) {
-                console.log("BUUUUUGGGGGG  !session.user !!!!!!")
-            } if (!session?.sessionToken) {
-                console.log("BUUUUUGGGGGG !session?.accessToken !!!!!!")
-            } if (session?.user.role !== "ADMIN") {
-                console.log("BUUUUUGGGGGG session?.user.role !== 'ADMIN '!!!!!!")
-            }
-        // {console.log("BUUUUUGGGGGG !!!!!!")
-        //     throw new Error("non authorisé")}
-        else {console.log("session ok")}
+        if (!session 
+            ||!session?.user 
+            ||!session?.sessionToken 
+            || session?.user.role !== "ADMIN"
+        ) throw new Error("non authorisé")
 
         await prisma.artwork.update({
             where: {
