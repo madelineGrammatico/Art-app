@@ -7,10 +7,11 @@ import { redirect } from "next/navigation"
 export const editCertificateAction = async({artworkId, content}: {artworkId:string, content: string}) => {
     try{
         const session = await auth()
+        console.log(session)
             if (
-                !session 
+                !session
                 || !session.user 
-                || !session.accessToken
+                || !session.sessionToken
                 || session.user.role !== "ADMIN"
             ) throw new Error("non authorisé")
                 
