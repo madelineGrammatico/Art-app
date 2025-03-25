@@ -37,6 +37,7 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         password: {},
       },
       authorize: async (credentials) => {
+        console.log("authorize")
         const validatedCredentials = credentialShema.parse(credentials)
         const user = await prisma.user.findUnique({
           where: {
@@ -56,9 +57,8 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         if (!passwordMatch) throw new Error("Mot de passe incorrect");
         
         const userSafe = exclude(user, ["password"])
-        const {accessToken} = signAccessToken(userSafe)
+        const {accessToken, accessTokenExpires} = signAccessToken(userSafe)
         const refreshToken = signRefreshToken(userSafe)
-
         await prisma.refreshToken.create({
           data: {
             token: refreshToken,
@@ -67,12 +67,13 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
           },
         })
         
-        return { ...userSafe, accessToken, refreshToken }
+        return { ...userSafe, accessToken, refreshToken , accessTokenExpires}
       }
     })
   ],
   callbacks: {
     async jwt({token, account, user}) {
+      console.log("callback.jwt")
       if (user) {
         token.id = user.id;
         token.firstName = user.firstName 
@@ -80,7 +81,7 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         token.role = user.role
         token.accessToken = user.accessToken;
         token.refreshToken = user.refreshToken;
-        token.accessTokenExpires = Date.now() + 15 * 60 * 1000;
+        // token.accessTokenExpires = Date.now() + 15 * 60 * 1000;
       } else{ throw new Error("pas d'utilisateur trouvé")}
       
       if (account?.provider === "credentials") {
@@ -91,10 +92,12 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         return tokenSafe;
       }
       const tokenSafe = exclude(token, ["password"])
-      const returnToken = await refreshAccessToken(tokenSafe)
-      return returnToken
+      const {accessToken, accessTokenExpires} = await refreshAccessToken(tokenSafe)
+      token.accessTokenExpires = accessTokenExpires
+      return accessToken
     },
     async session({session, token}) {
+      console.log("callback.session")
       if (token) {
         session.user.id = token.id as string
         session.user.firstName = token.firstName as string
@@ -111,6 +114,7 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
   },
   jwt: {
     encode: async function (params) {
+      console.log("jwt.encode")
       if (params.token?.credentials) {
         const sessionToken = params.token.accessToken as string
 

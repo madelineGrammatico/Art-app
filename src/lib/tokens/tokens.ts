@@ -10,8 +10,8 @@ if (!SECRET_KEY) {
 
 export function signAccessToken(user: Partial<Pick<User, "id"| "email"| "role">>) {
   const accessToken = jwt.sign({ id: user.id, email: user.email, role: user.role }, SECRET_KEY, { expiresIn: '15m' })
-  // const accessTokenExpires= Date.now() + 15 * 60 * 1000
-  return {accessToken}
+  const accessTokenExpires = Date.now() + 15 * 60 * 1000
+  return {accessToken, accessTokenExpires}
 }
 
 export function signRefreshToken(user: Omit<User, "password">) {
@@ -32,12 +32,12 @@ export async function refreshAccessToken(token:JWT) {
       throw new Error('Refresh token expiré ou invalide')
     }
 
-    const newAccessToken = signAccessToken({ id: token.id, email: token.email, role: token.role });
+    const{ accessToken, accessTokenExpires }= signAccessToken({ id: token.id, email: token.email, role: token.role });
 
     return {
       ...token,
-      accessToken: newAccessToken,
-      accessTokenExpires: Date.now() + 15 * 60 * 1000,
+      accessToken: accessToken,
+      accessTokenExpires: accessTokenExpires,
     };
   } catch (error) {
     console.error('Error refreshing access token:', error)
