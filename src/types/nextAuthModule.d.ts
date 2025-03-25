@@ -23,8 +23,7 @@ declare module "next-auth" {
 }
 
 declare module "next-auth/jwt" {
-  interface JWT extends Partial<Pick<User,"refreshToken" |"accessTokenExpires"| "id"| "email"| "role">> {
-  // accessTokenExpires: number
+  interface JWT extends Partial<Pick<User,"refreshToken"| "accessToken" |"accessTokenExpires"| "id"| "email"| "role">> {
   error?: string
   } 
 }
