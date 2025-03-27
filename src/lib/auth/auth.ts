@@ -57,7 +57,7 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         if (!passwordMatch) throw new Error("Mot de passe incorrect");
         
         const userSafe = exclude(user, ["password"])
-        const {accessToken, accessTokenExpires} = signAccessToken(userSafe)
+        const {accessToken} = signAccessToken(userSafe)
         const refreshToken = signRefreshToken(userSafe)
         await prisma.refreshToken.create({
           data: {
@@ -67,7 +67,7 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
           },
         })
         
-        return { ...userSafe, accessToken, refreshToken , accessTokenExpires}
+        return { ...userSafe, accessToken, refreshToken}
       }
     })
   ],
@@ -92,8 +92,7 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         return tokenSafe;
       }
       const tokenSafe = exclude(token, ["password"])
-      const {accessToken, accessTokenExpires} = await refreshAccessToken(tokenSafe)
-      token.accessTokenExpires = accessTokenExpires
+      const {accessToken, } = await refreshAccessToken(tokenSafe)
       return accessToken
     },
     async session({session, token}) {
