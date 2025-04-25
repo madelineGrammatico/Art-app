@@ -8,7 +8,7 @@ import bcrypt from "bcryptjs"
 // import { v4 as uuid } from "uuid"
 import { encode as defaultEncode } from "next-auth/jwt"
 import { UserRole } from "@prisma/client"
-import { refreshAccessToken, signAccessToken, signRefreshToken } from "../tokens/tokens"
+// import { refreshAccessToken, signAccessToken, signRefreshToken } from "../tokens/tokens"
 import { exclude } from "../utils"
 
 const adapter = PrismaAdapter(prisma)
@@ -57,17 +57,18 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         if (!passwordMatch) throw new Error("Mot de passe incorrect");
         
         const userSafe = exclude(user, ["password"])
-        const {accessToken} = signAccessToken(userSafe)
-        const refreshToken = signRefreshToken(userSafe)
-        await prisma.refreshToken.create({
-          data: {
-            token: refreshToken,
-            userId: user.id,
-            expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
-          },
-        })
+        // const {accessToken} = signAccessToken(userSafe)
+        // const refreshToken = signRefreshToken(userSafe)
+        // await prisma.refreshToken.create({
+        //   data: {
+        //     token: refreshToken,
+        //     userId: user.id,
+        //     expires: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+        //   },
+        // })
         
-        return { ...userSafe, accessToken, refreshToken}
+        // return { ...userSafe, accessToken, refreshToken}
+        return userSafe
       }
     })
   ],
@@ -79,21 +80,21 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         token.firstName = user.firstName 
         token.lastName = user.lastName
         token.role = user.role
-        token.accessToken = user.accessToken;
-        token.refreshToken = user.refreshToken;
+        // token.accessToken = user.accessToken;
+        // token.refreshToken = user.refreshToken;
         // token.accessTokenExpires = Date.now() + 15 * 60 * 1000;
       } else{ throw new Error("pas d'utilisateur trouvé")}
       
       if (account?.provider === "credentials") {
         token.credentials = true 
       }
-      if (Date.now() < token.accessTokenExpires) {
-        const tokenSafe = exclude(token, ["password"])
-        return tokenSafe;
-      }
-      const tokenSafe = exclude(token, ["password"])
-      const {accessToken, } = await refreshAccessToken(tokenSafe)
-      return accessToken
+      // if (Date.now() < token.accessTokenExpires) {
+      //   const tokenSafe = exclude(token, ["password"])
+      //   return tokenSafe;
+      // }
+      // const tokenSafe = exclude(token, ["password"])
+      // const {accessToken, } = await refreshAccessToken(tokenSafe)
+      // return accessToken
     },
     async session({session, token}) {
       console.log("callback.session")
