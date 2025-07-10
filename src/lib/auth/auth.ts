@@ -5,7 +5,6 @@ import { prisma } from "../prisma"
 import { PrismaAdapter } from "@auth/prisma-adapter"
 import { credentialShema } from "../shema"
 import bcrypt from "bcryptjs"
-import { v4 as uuid } from "uuid"
 import { encode as defaultEncode } from "next-auth/jwt"
 import { UserRole } from "@prisma/client"
 import { exclude } from "../utils"
@@ -36,7 +35,6 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         password: {},
       },
       authorize: async (credentials) => {
-        console.log("authorize")
         const validatedCredentials = credentialShema.parse(credentials)
         const user = await prisma.user.findUnique({
           where: {
@@ -54,12 +52,15 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
           
         const passwordMatch = await bcrypt.compare(validatedCredentials.password, user.password);
         if (!passwordMatch) throw new Error("Mot de passe incorrect");
+
+        return exclude(user, ["password"])
         
-        const userSafe = exclude(user, ["password"])
-        return userSafe
       }
     })
   ],
+  session:{
+    strategy: "database"
+  },
   callbacks: {
     async jwt({token, account, user}) {
       if (user) {
@@ -88,18 +89,18 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
     }
   },
   jwt: {
-    encode: async function (params) {
-      if (params.token?.credentials) {
-        const sessionToken = uuid()
+    encode: async (params) => {
+      const {token, maxAge} = params
 
-        if (!params.token.sub) {
-          throw new Error("No user ID found in token");
-        }
+      if (token?.credentials) {
+        const sessionToken = crypto.randomUUID()
+        const userId = token.sub
+        if (!userId) throw new Error("No user ID found in token")
 
         const createdSession = await adapter?.createSession?.({
           sessionToken: sessionToken,
-          userId: params.token.sub,
-          expires: new Date(Date.now() + 30 * 24 * 60 * 60 * 1000),
+          userId: userId,
+          expires: new Date(Date.now() + (maxAge ?? 30 * 24 * 60 * 60 * 1000)),
         });
         
         if (!createdSession) {
@@ -107,7 +108,8 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
         }
         return sessionToken;
       }
-      return defaultEncode(params);
+
+      return defaultEncode(params)
     },
   },
   cookies: {
