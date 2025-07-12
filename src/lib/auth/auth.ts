@@ -1,12 +1,11 @@
-import NextAuth from "next-auth"
+import NextAuth, { Session} from "next-auth"
 import Google from "next-auth/providers/google"
 import Credentials from "next-auth/providers/credentials"
 import { prisma } from "../prisma"
 import { PrismaAdapter } from "@auth/prisma-adapter"
 import { credentialShema } from "../shema"
 import bcrypt from "bcryptjs"
-import { encode as defaultEncode } from "next-auth/jwt"
-import { UserRole } from "@prisma/client"
+import { encode as defaultEncode} from "next-auth/jwt"
 import { exclude } from "../utils"
 
 const adapter = PrismaAdapter(prisma)
@@ -75,17 +74,10 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
       }
       return token
     },
-    async session({session, token}) {
-      if (token) {
-        session.user.id = token.id as string
-        session.user.firstName = token.firstName as string
-        session.user.lastName = token.lastName as string
-        session.user.role = token.role as UserRole
-      }
-      let userSessionSafe = session.user
-      userSessionSafe = exclude(session.user, ["password"])
-      session.user = userSessionSafe
-      return session
+    async session({session}: {session: Session}) {
+      session.user = exclude(session.user ,["password", "email", "emailVerified", "createdAt", "updatedAt"])
+
+      return exclude(session, ["sessionToken", "userId", "id", "createdAt", "updatedAt"])
     }
   },
   jwt: {
