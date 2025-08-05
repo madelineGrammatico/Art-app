@@ -11,19 +11,18 @@ import { useEffect, useState } from "react";
 import {useRouter} from "next/navigation";
 
 const Page = () => {
-    const {data: session, update} = useSession()
-    
+    const { data: session, update } = useSession()
     const [isSubmit, setIsSubmit] = useState(false)
-    const router= useRouter()
+    const router = useRouter()
 
     useEffect(()=>{ 
       if(session) router.push("/")
     }, [session, router])
-
+  
     useEffect(()=> {
-      update()
+      if(isSubmit) update()
     }, [isSubmit])
-    
+   
   return (
     <Card className="w-full max-w-sm mx-auto rounded-2xl my-8  bg-slate-400">
       <div className="space-y-6 p-6 text-white">
@@ -46,6 +45,7 @@ const Page = () => {
             { 
               await CredentialsSignInAction(formData)
               setIsSubmit(true) 
+              router.refresh()
             }
           }
         >

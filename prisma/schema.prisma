@@ -11,19 +11,22 @@ datasource db {
 }
 
 model Artwork {
-  id        String       @id @default(cuid())
-  title     String
-  price     String
+  id            String        @id @default(cuid())
+  title         String
+  price         String
 
-  invoice   Invoice[]
-  certificate Certificate?
-  createdAt DateTime  @default(now())
-  
+  ownerId       String?
+  owner         User?         @relation(fields: [ownerId], references: [id])
+  invoice       Invoice[]
+  certificateId String?       @unique
+  certificate   Certificate?
+  createdAt     DateTime      @default(now())
 }
+
 model Certificate {
-  id          String  @id @default(cuid())
-  artworkId   String  @unique
-  artwork     Artwork @relation(fields: [artworkId], references: [id])
+  id          String    @id @default(cuid())
+  artworkId   String    @unique 
+  artwork     Artwork?  @relation(fields: [artworkId], references: [id], onDelete: Cascade)
   isssueDate  DateTime
   content     String
 }
@@ -39,8 +42,8 @@ model Invoice {
   artworkId   String
   artwork     Artwork       @relation(fields: [artworkId], references: [id])
   buyerId     String
-  buyer       User          @relation(fields: [buyerId], references: [id])
-  invoiceDate DateTime      @default(now())
+  buyer       User          @relation(fields: [buyerId], references: [id], onDelete: Restrict)
+  createdAt   DateTime      @default(now())
   amount      Decimal
   status      InvoiceStatus
 }
@@ -51,24 +54,24 @@ enum UserRole {
 }
 
 model User {
-  id                  String               @id @default(cuid())
+  id                  String                @id @default(cuid())
   name                String?
   lastName            String?
   firstName           String?
-  email               String?              @unique
+  email               String?               @unique
   emailVerified       DateTime?
   password            String?
   image               String?
-  role                UserRole           @default(CLIENT)
+  role                UserRole              @default(CLIENT)
   
   invoices            Invoice[]
-
+  artworks            Artwork[]
   passwordResetTokens PasswordResetToken[]  
   accounts            Account[]
   sessions            Session[]
   refreshTokens       RefreshToken[]
   // Optional for WebAuthn support
-  Authenticator       Authenticator[]
+  // Authenticator       Authenticator[]
  
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
@@ -92,7 +95,7 @@ model PasswordResetToken {
 }
 
 model Account {
-  id                String  @id @default(cuid())
+  id                String    @id @default(cuid())
   userId            String
   type              String
   provider          String
@@ -105,45 +108,45 @@ model Account {
   id_token          String?
   session_state     String?
  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
  
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
  
   @@unique([provider, providerAccountId])
 }
  
 model Session {
-  id           String   @id @default(cuid())
-  sessionToken String   @unique
-  userId       String
-  expires      DateTime
-  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id            String   @id @default(cuid())
+  sessionToken  String   @unique
+  userId        String
+  expires       DateTime
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
  
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
 }
  
-model VerificationToken {
-  identifier String
-  token      String
-  expires    DateTime
+// model VerificationToken {
+//   identifier String
+//   token      String
+//   expires    DateTime
  
-  @@unique([identifier, token])
-}
+//   @@unique([identifier, token])
+// }
  
-// Optional for WebAuthn support
-model Authenticator {
-  credentialID         String  @unique
-  userId               String
-  providerAccountId    String
-  credentialPublicKey  String
-  counter              Int
-  credentialDeviceType String
-  credentialBackedUp   Boolean
-  transports           String?
+// // Optional for WebAuthn support
+// model Authenticator {
+//   credentialID         String  @unique
+//   userId               String
+//   providerAccountId    String
+//   credentialPublicKey  String
+//   counter              Int
+//   credentialDeviceType String
+//   credentialBackedUp   Boolean
+//   transports           String?
  
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+//   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
  
-  @@id([userId, credentialID])
-}
+//   @@id([userId, credentialID])
+// }

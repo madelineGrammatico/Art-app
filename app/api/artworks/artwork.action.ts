@@ -78,7 +78,6 @@ export const deleteArtworkAction = async (id: string) => {
             || session.user.role !== "ADMIN"
         ) throw Error("non authorisé")
         
-        delete
         await prisma.artwork.delete({
             where: {
                 id: id
