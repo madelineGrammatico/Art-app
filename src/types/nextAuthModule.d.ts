@@ -1,29 +1,25 @@
 import { UserRole } from "@prisma/client"
-import type { DefaultSession } from "next-auth"
-
+ 
 declare module "next-auth" {
-  interface User
-  {
+  interface User  {
+    id: string
     firstName?: string | null
     lastName?: string | null
     role: UserRole
-    // accessToken?: string
-    // refreshToken?: string
-    // accessTokenExpires?: number
     password?: string | null
+    emailVerified?: Date | null
+    createdAt?: Date
+    updatedAt?: Date 
+    email?: string | null
+    image?: string | null 
   } 
-  
-  interface Session{
-    user: User & DefaultSession["user"]
-    // accessToken: string
-    // accessTokenExpires: number
-    // error?: string
-    // sessionToken: string
+
+  interface Session {
+    user: User
+    id: string  | null
+    userId: string
+    sessionToken: string  | null
+    createdAt: Date 
+    updatedAt: Date
   }
 }
-
-// declare module "next-auth/jwt" {
-//   interface JWT extends Partial<Pick<User,"refreshToken"| "accessToken" |"accessTokenExpires"| "id"| "email"| "role">> {
-//   error?: string
-//   } 
-// }
