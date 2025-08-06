@@ -24,7 +24,7 @@ export default async function Page() {
                     <Card className="flex items-start gap-4 p-4" key={artwork.id}>
                         <div className='flex flex-col flex-1 gap-2'>
                             <h2 className=''>{artwork.title}</h2>
-                            <p>{artwork.price}</p>
+                            <p>{Number(artwork.price)}</p>
                         </div>
                         <div className="flex flex-col gap-2">
 
