@@ -17,13 +17,13 @@ export function ArtworkForm({artwork}: {artwork?: Artwork}) {
         if(artwork) {
             const json = await editArtworkAction(artwork.id, {
                 title: String(FormData.get('title')),
-                price: String(FormData.get('price'))
+                price: Number(FormData.get('price'))
             })
             error= json.error
         } else {
             const json = await createArtworkAction({
                 title: String(FormData.get('title')),
-                price: String(FormData.get('price'))
+                price: Number(FormData.get('price'))
             })
             error= json.error
         }
@@ -56,7 +56,7 @@ export function ArtworkForm({artwork}: {artwork?: Artwork}) {
                     <Label>
                         Prix
                         <Input 
-                            defaultValue={artwork?.price}
+                            defaultValue={String(artwork?.price)}
                             name="price"
                             className="bg-white text-black"
                         />

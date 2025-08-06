@@ -6,13 +6,14 @@ import { redirect } from "next/navigation"
 
 export const createArtworkAction = async (artwork: {
     title: string, 
-    price: string
+    price: number
 }) => {
     try {
+        console.log("artwork : ", artwork)
         const session = await auth()
         if (!session 
             ||!session?.user 
-            ||!session?.sessionToken 
+            // ||!session?.sessionToken 
             || session?.user.role !== "ADMIN"
         ) throw new Error("non authorisé")
         
@@ -25,7 +26,7 @@ export const createArtworkAction = async (artwork: {
         await prisma.certificate.create({
             data: {
                 artworkId: newArtwork.id,
-                isssueDate: new Date(Date.now()),
+                issueDate: new Date(Date.now()),
                 content: "certificat de test"
             }
         })
@@ -41,13 +42,13 @@ export const createArtworkAction = async (artwork: {
 
 export const editArtworkAction = async (id: string, artwork: {
     title: string, 
-    price: string
+    price: number
 }) => {
     try {
         const session = await auth()
         if (!session 
             ||!session?.user 
-            ||!session?.sessionToken 
+            // ||!session?.sessionToken
             || session?.user.role !== "ADMIN"
         ) throw new Error("non authorisé")
 
@@ -74,7 +75,7 @@ export const deleteArtworkAction = async (id: string) => {
         if (
             !session 
             || !session.user 
-            || !session.sessionToken
+            // || !session.sessionToken
             || session.user.role !== "ADMIN"
         ) throw Error("non authorisé")
         
