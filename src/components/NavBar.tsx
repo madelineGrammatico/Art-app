@@ -79,7 +79,7 @@ export default function NavBar() {
                 </Link>
               </MenubarItem>
               <MenubarItem>
-                <Link href="">
+                <Link href="/profile">
                   Mon Profil
                 </Link>
               </MenubarItem>
