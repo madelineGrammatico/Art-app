@@ -2,8 +2,9 @@
 
 import { updateUserAction } from "@/app/api/users/user.action";
 import { Label } from "@radix-ui/react-label";
-import { useState } from "react";
+import { startTransition, useState } from "react";
 import { Button } from "./ui/button";
+import { useSession } from "next-auth/react";
 
 export default function EditProfileForm({id, firstname, lastname, image }: {
     id: string;
@@ -11,28 +12,38 @@ export default function EditProfileForm({id, firstname, lastname, image }: {
     lastname: string | null;
     image: string | null;
 }) {
+    const {update} = useSession()
     const [newFirstname, setNewfirstName] = useState(firstname || "")
     const [newLastname, setNewLastName] = useState(lastname || "")
     const [newImage, setNewImage] = useState(image  || "")
 
-    const handleSubmit = async (FormData: FormData) => {
-        await updateUserAction(id,{
-            firstName: String(FormData.get("newFirstname")),
-            lastName: String(FormData.get("newLastname")),
-            image: String(FormData.get("newImage"))
+    const handleSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+        e.preventDefault();
+        console.log("handleSubmit called")
+        startTransition(async () => {
+            console.log("startTransition user with id:", id);
+            const user = await updateUserAction(id,{
+                firstName: newFirstname,
+                lastName: newLastname,
+                image: newImage
+            })
+            console.log("handleSubmit user updated:", user);
+            if(user)update()
         })
     }
         
   return (
     <div>
     <form
-      action={(FormData) => handleSubmit(FormData)}
+      onSubmit={(e) => handleSubmit(e)}
+      className="flex flex-col space-y-4 p-2 mt-4"
     >
-        <Label>
+        <Label
+            className=""
+        >
             Prénom
             <input
                 defaultValue={newFirstname}
-                name="firstName"
                 className="bg-white text-black"
                 onChange={(e) => setNewfirstName(e.target.value)}
             />
@@ -41,7 +52,6 @@ export default function EditProfileForm({id, firstname, lastname, image }: {
             Nom
             <input
                 defaultValue={newLastname}
-                name="lastName"
                 className="bg-white text-black"
                 onChange={(e) => setNewLastName(e.target.value)}
             />

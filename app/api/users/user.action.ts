@@ -1,3 +1,4 @@
+"use server"
 import { auth } from "@/src/lib/auth/auth"
 import { prisma } from "@/src/lib/prisma"
 import { User } from "@prisma/client"
@@ -24,17 +25,20 @@ export const getUserAction = async (id: string)=> {
     } catch(error) { console.error(error) }
 }
 
-export const updateUserAction = async (id: string, newUser: Partial<User>) => {
+export const updateUserAction = async (
+    id: string, 
+    newUser: Pick<User, 'firstName' | 'lastName' | 'image'> 
+) => {
+
     try {
         const session = await auth()
         if (!session?.user ) throw new Error("non authorisé")
         if ((session.user.id === id || session.user.role === "ADMIN")) {
-
             const user = await prisma.user.update({
                 where: {
                     id: id
-                }, 
-                data: {...newUser}
+                },
+                data: newUser
             })
 
             if (!user) throw new Error("User not found")
