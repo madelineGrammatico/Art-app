@@ -27,18 +27,18 @@ export default async function  RootLayout({ children }: Readonly<{
 }>) {
   const session = await auth()
   return (
-    <html lang="en" className="h-full">
+    <html lang="en">
       <body
-        className={`${geistSans.variable} ${geistMono.variable} font-sans antialiased h-full px-32 py-6 bg-slate-400`}
+        className={`${geistSans.variable} ${geistMono.variable}w-screen h-screen font-sans antialiased px-32 pt-6 bg-slate-400 flex flex-col`}
       >
         <SessionWrapper>
           <Header>
             <NavBar/>
           </Header>
           <Separator/>
-            <span>{JSON.stringify(session?.user.role)}</span>
+            <span>{JSON.stringify(session?.user)}</span>
           <Separator/>
-          <div className="flex flex-col gap-4 py-4">
+          <div className="flex-1 flex flex-col gap-4 py-4">
             {children}
           </div>
         </SessionWrapper>
