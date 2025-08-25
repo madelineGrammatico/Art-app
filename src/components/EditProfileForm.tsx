@@ -5,6 +5,7 @@ import { Label } from "@radix-ui/react-label";
 import { startTransition, useState } from "react";
 import { Button } from "./ui/button";
 import { useSession } from "next-auth/react";
+import { Input } from "./ui/input";
 
 export default function EditProfileForm({id, firstname, lastname, image }: {
     id: string;
@@ -33,16 +34,13 @@ export default function EditProfileForm({id, firstname, lastname, image }: {
     }
         
   return (
-    <div>
     <form
       onSubmit={(e) => handleSubmit(e)}
-      className="flex flex-col space-y-4 p-2 mt-4"
+      className="flex flex-col space-y-4 p-2 mt-6"
     >
-        <Label
-            className=""
-        >
+        <Label>
             Prénom
-            <input
+            <Input
                 defaultValue={newFirstname}
                 className="bg-white text-black"
                 onChange={(e) => setNewfirstName(e.target.value)}
@@ -50,7 +48,7 @@ export default function EditProfileForm({id, firstname, lastname, image }: {
         </Label>
         <Label>
             Nom
-            <input
+            <Input
                 defaultValue={newLastname}
                 className="bg-white text-black"
                 onChange={(e) => setNewLastName(e.target.value)}
@@ -58,17 +56,15 @@ export default function EditProfileForm({id, firstname, lastname, image }: {
         </Label>
         <Label>
             Image
-            <input 
+            <Input 
                 defaultValue={newImage}
-                name="image"
                 className="bg-white text-black"
-                onChange={(e) => setNewImage(e.target.value)}
+                onChange={(e) => {setNewImage(e.target.value)}}
             />
         </Label>
         <Button type="submit">
             Enregistrer
         </Button>
     </form>
-    </div>
   )
 }
