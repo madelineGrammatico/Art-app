@@ -36,35 +36,35 @@ export default function EditProfileForm({id, firstname, lastname, image }: {
   return (
     <form
       onSubmit={(e) => handleSubmit(e)}
-      className="flex flex-col space-y-4 p-2 mt-6"
+      className="flex flex-col space-y-4 py-2"
     >
-        <Label>
-            Prénom
-            <Input
-                defaultValue={newFirstname}
-                className="bg-white text-black"
-                onChange={(e) => setNewfirstName(e.target.value)}
-            />
-        </Label>
-        <Label>
-            Nom
-            <Input
-                defaultValue={newLastname}
-                className="bg-white text-black"
-                onChange={(e) => setNewLastName(e.target.value)}
-            />
-        </Label>
-        <Label>
-            Image
-            <Input 
-                defaultValue={newImage}
-                className="bg-white text-black"
-                onChange={(e) => {setNewImage(e.target.value)}}
-            />
-        </Label>
-        <Button type="submit">
-            Enregistrer
-        </Button>
+      <Label className="text-white text-sm font-medium">
+          Prénom
+          <Input
+              defaultValue={newFirstname}
+              className="bg-white text-black mt-1"
+              onChange={(e) => setNewfirstName(e.target.value)}
+          />
+      </Label>
+      <Label className="text-white text-sm font-medium">
+          Nom
+          <Input
+              defaultValue={newLastname}
+              className="bg-white text-black mt-1"
+              onChange={(e) => setNewLastName(e.target.value)}
+          />
+      </Label>
+      <Label className="text-white text-sm font-medium">
+          Image
+          <Input 
+              defaultValue={newImage}
+              className="bg-white text-black mt-1"
+              onChange={(e) => {setNewImage(e.target.value)}}
+          />
+      </Label>
+      <Button type="submit" variant="destructive" className="mt-2 ">
+          Enregistrer
+      </Button>
     </form>
   )
 }
