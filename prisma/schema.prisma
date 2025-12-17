@@ -75,6 +75,7 @@ model User {
   accounts            Account[]
   sessions            Session[]
   refreshTokens       RefreshToken[]
+  postalAddresses     PostalAddress[]
 
   createdAt           DateTime              @default(now())
   updatedAt           DateTime              @updatedAt
@@ -129,6 +130,22 @@ model Session {
 
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model PostalAddress {
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  street           String
+  postalCode       String
+  city             String
+  country          String
+  isDefaultBilling Boolean  @default(false)
+  isDefaultShipping Boolean  @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
 
   @@index([userId])
 }

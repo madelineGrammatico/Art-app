@@ -8,7 +8,7 @@ CREATE TYPE "UserRole" AS ENUM ('ADMIN', 'CLIENT');
 CREATE TABLE "Artwork" (
     "id" TEXT NOT NULL,
     "title" TEXT NOT NULL,
-    "price" TEXT NOT NULL,
+    "price" DECIMAL(65,30) NOT NULL,
     "ownerId" TEXT,
     "certificateId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -20,7 +20,7 @@ CREATE TABLE "Artwork" (
 CREATE TABLE "Certificate" (
     "id" TEXT NOT NULL,
     "artworkId" TEXT NOT NULL,
-    "isssueDate" TIMESTAMP(3) NOT NULL,
+    "issueDate" TIMESTAMP(3) NOT NULL,
     "content" TEXT NOT NULL,
 
     CONSTRAINT "Certificate_pkey" PRIMARY KEY ("id")
@@ -108,11 +108,36 @@ CREATE TABLE "Session" (
     CONSTRAINT "Session_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "PostalAddress" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "street" TEXT NOT NULL,
+    "postalCode" TEXT NOT NULL,
+    "city" TEXT NOT NULL,
+    "country" TEXT NOT NULL,
+    "isDefaultBilling" BOOLEAN NOT NULL DEFAULT false,
+    "isDefaultShipping" BOOLEAN NOT NULL DEFAULT false,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "PostalAddress_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "Artwork_certificateId_key" ON "Artwork"("certificateId");
 
 -- CreateIndex
+CREATE INDEX "Artwork_ownerId_idx" ON "Artwork"("ownerId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "Certificate_artworkId_key" ON "Certificate"("artworkId");
+
+-- CreateIndex
+CREATE INDEX "Invoice_buyerId_idx" ON "Invoice"("buyerId");
+
+-- CreateIndex
+CREATE INDEX "Invoice_artworkId_idx" ON "Invoice"("artworkId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
@@ -124,10 +149,19 @@ CREATE UNIQUE INDEX "RefreshToken_token_key" ON "RefreshToken"("token");
 CREATE UNIQUE INDEX "PasswordResetToken_token_key" ON "PasswordResetToken"("token");
 
 -- CreateIndex
+CREATE INDEX "Account_userId_idx" ON "Account"("userId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "Account_provider_providerAccountId_key" ON "Account"("provider", "providerAccountId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "Session_sessionToken_key" ON "Session"("sessionToken");
+
+-- CreateIndex
+CREATE INDEX "Session_userId_idx" ON "Session"("userId");
+
+-- CreateIndex
+CREATE INDEX "PostalAddress_userId_idx" ON "PostalAddress"("userId");
 
 -- AddForeignKey
 ALTER TABLE "Artwork" ADD CONSTRAINT "Artwork_ownerId_fkey" FOREIGN KEY ("ownerId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
@@ -152,3 +186,7 @@ ALTER TABLE "Account" ADD CONSTRAINT "Account_userId_fkey" FOREIGN KEY ("userId"
 
 -- AddForeignKey
 ALTER TABLE "Session" ADD CONSTRAINT "Session_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "PostalAddress" ADD CONSTRAINT "PostalAddress_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
