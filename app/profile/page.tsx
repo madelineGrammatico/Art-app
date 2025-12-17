@@ -1,11 +1,11 @@
 import { auth } from '@/src/lib/auth/auth'
 import { getUserAction } from '../api/users/user.action'
 import { redirect } from 'next/navigation'
-import EditProfilePanel from '@/src/components/EditProfilePanel'
 import Image from 'next/image'
 import { Card } from '@/src/components/ui/card'
 import defaultImage from '@/public/rouge_gorge.png'
 import { Separator } from "@/src/components/ui/separator"
+import ProfileSectionsWrapper from '@/src/components/profile/ProfileSectionsWrapper'
 
 export default async function Page() {
   const session = await auth()
@@ -80,18 +80,9 @@ export default async function Page() {
             </div>
           </div>
 
-          <Card className="flex flex-col p-6 bg-slate-900 text-white w-full lg:w-1/2 h-fit">
-            <h3 className="text-lg font-semibold mb-2">Modifier mon profil</h3>
-            <p className="text-sm text-slate-300 mb-4">
-              Cliquez sur le bouton pour modifier vos informations.
-            </p>
-            <EditProfilePanel
-              id={user?.id}
-              firstname={user.firstName}
-              lastname={user.lastName}
-              image={user.image}
-            />
-          </Card>
+          <div className="flex-1 flex flex-col gap-4">
+            <ProfileSectionsWrapper user={user} />
+          </div>
         </div>
       </section>
     </main>

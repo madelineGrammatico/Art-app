@@ -3,6 +3,7 @@ import { auth } from "@/src/lib/auth/auth"
 import { prisma } from "@/src/lib/prisma"
 import { User } from "@prisma/client"
 import bcrypt from "bcryptjs"
+import { credentialPasswordShema } from "@/src/lib/shema"
 
 export const getUserAction = async (id: string)=> {
     try {
@@ -46,6 +47,25 @@ export const updateUserAction = async (
             return user
         } else throw new Error("non authorisé")
         
+    } catch (error) {
+        console.error(error)
+        return error
+    }
+}
+
+export const updateUserEmailAction = async (id: string, email: string) => {
+    try {
+        const session = await auth()
+        if (!session?.user ) throw new Error("non authorisé")
+        if ((session.user.id === id || session.user.role === "ADMIN")) {
+            const user = await prisma.user.update({
+                where: { id },
+                data: { email }
+            })
+
+            if (!user) throw new Error("User not found")
+            return user
+        } else throw new Error("non authorisé")
     } catch (error) {
         console.error(error)
         return error
@@ -120,5 +140,63 @@ export const hasPasswordAction = async (userId: string) => {
     } catch (error) {
         console.error(error)
         return { hasPassword: false }
+    }
+}
+
+export const changePasswordAction = async (
+    userId: string,
+    currentPassword: string,
+    newPassword: string
+) => {
+    try {
+        const session = await auth()
+        if (!session?.user) throw new Error("non authorisé")
+        if (session.user.id !== userId && session.user.role !== "ADMIN") {
+            throw new Error("non authorisé")
+        }
+
+        // Vérifier le mot de passe actuel
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: {
+                password: true,
+                accounts: {
+                    select: {
+                        provider: true
+                    }
+                }
+            }
+        })
+
+        if (!user) throw new Error("Utilisateur non trouvé")
+
+        const hasCredentialsAccount = user.accounts.some(account => account.provider === "credentials")
+        if (!hasCredentialsAccount || !user.password) {
+            throw new Error("Cet utilisateur n'a pas de mot de passe défini")
+        }
+
+        const passwordMatch = await bcrypt.compare(currentPassword, user.password)
+        if (!passwordMatch) {
+            throw new Error("Mot de passe actuel incorrect")
+        }
+
+        // Valider le nouveau mot de passe
+        const validatedPassword = credentialPasswordShema.parse({ password: newPassword })
+
+        // Hasher le nouveau mot de passe
+        const saltRounds = Number(process.env.BCRYPT_SALT_ROUNDS) || 10
+        const hashedPassword = await bcrypt.hash(validatedPassword.password, saltRounds)
+
+        // Mettre à jour le mot de passe
+        const updated = await prisma.user.update({
+            where: { id: userId },
+            data: { password: hashedPassword }
+        })
+
+        if (!updated) throw new Error("Erreur lors de la mise à jour du mot de passe")
+        return updated
+    } catch (error) {
+        console.error(error)
+        throw error
     }
 }
