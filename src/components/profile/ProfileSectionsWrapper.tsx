@@ -2,11 +2,24 @@
 
 import ProfileSections, { type SectionConfig } from "./ProfileSections";
 import ProfileForm from "./ProfileForm";
+import AddressSection from "./AddressSection";
 import {
   updateUserAction,
   updateUserEmailAction,
   changePasswordAction,
 } from "@/app/api/users/user.action";
+type PostalAddress = {
+  id: string;
+  userId: string;
+  street: string;
+  postalCode: string;
+  city: string;
+  country: string;
+  isDefaultBilling: boolean;
+  isDefaultShipping: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+};
 
 type ProfileUser = {
   id: string;
@@ -14,10 +27,6 @@ type ProfileUser = {
   firstName?: string | null;
   lastName?: string | null;
   image?: string | null;
-  street?: string | null;
-  postalCode?: string | null;
-  city?: string | null;
-  country?: string | null;
 };
 
 const sections: SectionConfig[] = [
@@ -58,29 +67,6 @@ const sections: SectionConfig[] = [
     }),
   },
   {
-    id: "address",
-    title: "Adresse postale",
-    description: "Adresse utilisée pour la facturation et la livraison.",
-    requiresPassword: false,
-    fields: [
-      { name: "street", label: "Rue", type: "text" },
-      { name: "postalCode", label: "Code postal", type: "text" },
-      { name: "city", label: "Ville", type: "text" },
-      { name: "country", label: "Pays", type: "text" },
-    ],
-    submitAction: async (userId: string, values: Record<string, string>) => {
-      // TODO: Créer updateUserAddressAction si nécessaire
-      // Pour l'instant, on retourne une promesse résolue
-      return Promise.resolve({});
-    },
-    getInitialValues: (user: ProfileUser) => ({
-      street: user.street ?? "",
-      postalCode: user.postalCode ?? "",
-      city: user.city ?? "",
-      country: user.country ?? "",
-    }),
-  },
-  {
     id: "password",
     title: "Modifier mon mot de passe",
     description: "Sécurisez l'accès à votre compte.",
@@ -107,24 +93,31 @@ const sections: SectionConfig[] = [
 
 type ProfileSectionsWrapperProps = {
   user: ProfileUser;
+  addresses: PostalAddress[];
 };
 
-export default function ProfileSectionsWrapper({ user }: ProfileSectionsWrapperProps) {
+export default function ProfileSectionsWrapper({
+  user,
+  addresses,
+}: ProfileSectionsWrapperProps) {
   return (
-    <ProfileSections
-      user={user}
-      sections={sections}
-      renderFormForSection={(section, currentUser, onSuccess) => {
-        return (
-          <ProfileForm
-            userId={currentUser.id}
-            fields={section.fields}
-            initialValues={section.getInitialValues(currentUser)}
-            submitAction={section.submitAction}
-            onSuccess={onSuccess}
-          />
-        );
-      }}
-    />
+    <div className="flex flex-col gap-6">
+      <ProfileSections
+        user={user}
+        sections={sections}
+        renderFormForSection={(section, currentUser, onSuccess) => {
+          return (
+            <ProfileForm
+              userId={currentUser.id}
+              fields={section.fields}
+              initialValues={section.getInitialValues(currentUser)}
+              submitAction={section.submitAction}
+              onSuccess={onSuccess}
+            />
+          );
+        }}
+      />
+      <AddressSection userId={user.id} initialAddresses={addresses} />
+    </div>
   );
 }

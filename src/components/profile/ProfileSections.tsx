@@ -9,10 +9,6 @@ type ProfileUser = {
   firstName?: string | null;
   lastName?: string | null;
   image?: string | null;
-  street?: string | null;
-  postalCode?: string | null;
-  city?: string | null;
-  country?: string | null;
 };
 
 type SectionField = {

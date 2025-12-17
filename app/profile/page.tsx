@@ -1,5 +1,5 @@
 import { auth } from '@/src/lib/auth/auth'
-import { getUserAction } from '../api/users/user.action'
+import { getUserAction, getUserAddressesAction } from '../api/users/user.action'
 import { redirect } from 'next/navigation'
 import Image from 'next/image'
 import { Card } from '@/src/components/ui/card'
@@ -14,6 +14,8 @@ export default async function Page() {
   
   const user = await getUserAction(userId)
   if (!user) redirect('/sign-in')
+  
+  const addresses = await getUserAddressesAction(userId).catch(() => [])
   return (
     <main className="w-full flex-1 mx-auto max-w-5xl px-4 py-8 flex flex-col gap-8 md:flex-row">
       {/* Colonne gauche : résumé du profil + navigation compte */}
@@ -81,7 +83,7 @@ export default async function Page() {
           </div>
 
           <div className="flex-1 flex flex-col gap-4">
-            <ProfileSectionsWrapper user={user} />
+            <ProfileSectionsWrapper user={user} addresses={addresses} />
           </div>
         </div>
       </section>
