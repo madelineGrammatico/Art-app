@@ -45,6 +45,11 @@ export default function EditProfilePanel({
     setIsPasswordVerified(true);
   };
 
+  const handleFormSuccess = () => {
+    setIsOpen(false);
+    setIsPasswordVerified(false);
+  };
+
   return (
     <div className="flex flex-col space-y-4">
       {!isOpen && (
@@ -82,6 +87,7 @@ export default function EditProfilePanel({
                   firstname={firstname}
                   lastname={lastname}
                   image={image}
+                  onSuccess={handleFormSuccess}
                 />
               </div>
               <div className="flex justify-end">
