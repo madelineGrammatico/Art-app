@@ -20,6 +20,7 @@ model Artwork {
   invoice       Invoice[]
   certificateId String?       @unique
   certificate   Certificate?
+  basketItems   BasketItem[]
   createdAt     DateTime      @default(now())
 
   @@index([ownerId])
@@ -40,17 +41,20 @@ enum InvoiceStatus {
 }
 
 model Invoice {
-  id          String        @id @default(uuid())
-  artworkId   String
-  artwork     Artwork       @relation(fields: [artworkId], references: [id])
-  buyerId     String
-  buyer       User          @relation(fields: [buyerId], references: [id], onDelete: Restrict)
-  createdAt   DateTime      @default(now())
-  amount      Decimal      
-  status      InvoiceStatus
+  id                   String        @id @default(uuid())
+  artworkId            String
+  artwork              Artwork       @relation(fields: [artworkId], references: [id])
+  buyerId              String
+  buyer                User          @relation(fields: [buyerId], references: [id], onDelete: Restrict)
+  createdAt            DateTime      @default(now())
+  amount               Decimal      
+  status               InvoiceStatus
+  stripeSessionId      String?       @unique
+  stripePaymentIntentId String?      @unique
 
   @@index([buyerId])
   @@index([artworkId])
+  @@index([stripeSessionId])
 }
 
 enum UserRole {
@@ -75,6 +79,8 @@ model User {
   accounts            Account[]
   sessions            Session[]
   refreshTokens       RefreshToken[]
+  postalAddresses     PostalAddress[]
+  basket              Basket?
 
   createdAt           DateTime              @default(now())
   updatedAt           DateTime              @updatedAt
@@ -131,6 +137,47 @@ model Session {
   updatedAt     DateTime @updatedAt
 
   @@index([userId])
+}
+
+model PostalAddress {
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  street           String
+  postalCode       String
+  city             String
+  country          String
+  isDefaultBilling Boolean  @default(false)
+  isDefaultShipping Boolean  @default(false)
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+model Basket {
+  id        String       @id @default(uuid())
+  userId    String       @unique
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     BasketItem[]
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([userId])
+}
+
+model BasketItem {
+  id        String   @id @default(uuid())
+  basketId  String
+  basket    Basket   @relation(fields: [basketId], references: [id], onDelete: Cascade)
+  artworkId String
+  artwork   Artwork  @relation(fields: [artworkId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([basketId, artworkId])
+  @@index([basketId])
+  @@index([artworkId])
 }
  
 // model VerificationToken {

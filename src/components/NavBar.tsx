@@ -74,12 +74,12 @@ export default function NavBar() {
                 </Link>
               </MenubarItem>
               <MenubarItem>
-                <Link href="">
+                <Link href="/profile/basket">
                   Mon Panier
                 </Link>
               </MenubarItem>
               <MenubarItem>
-                <Link href="">
+                <Link href="/profile">
                   Mon Profil
                 </Link>
               </MenubarItem>

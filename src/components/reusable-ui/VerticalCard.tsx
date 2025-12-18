@@ -1,13 +1,15 @@
 import React from 'react'
-import { Button, buttonVariants } from '../ui/button'
+import { buttonVariants } from '../ui/button'
 import Link from 'next/link'
+import AddToBasketButton from '../basket/AddToBasketButton'
 
 type VerticalCardProps = {
   title: string, 
   linkPage: string, 
   index: number,
+  artworkId: string,
 }
-export default function VerticalCard({title, linkPage, index, }: VerticalCardProps) {
+export default function VerticalCard({title, linkPage, index, artworkId }: VerticalCardProps) {
   return (
     <div 
     
@@ -41,7 +43,7 @@ export default function VerticalCard({title, linkPage, index, }: VerticalCardPro
               href={linkPage}
               className={buttonVariants({ variant:"bubule"})}
             >Voir plus</Link>
-              <Button>Acheter</Button>
+              <AddToBasketButton artworkId={artworkId} variant="bubule" />
             </div>
         </div>
 
