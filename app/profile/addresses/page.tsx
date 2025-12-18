@@ -1,20 +1,23 @@
 import { auth } from '@/src/lib/auth/auth'
-import { getUserAction } from '../api/users/user.action'
+import { getUserAddressesAction, getUserAction } from '../../api/users/user.action'
 import { redirect } from 'next/navigation'
 import Image from 'next/image'
 import { Card } from '@/src/components/ui/card'
 import defaultImage from '@/public/rouge_gorge.png'
 import { Separator } from "@/src/components/ui/separator"
-import ProfileSectionsWrapper from '@/src/components/profile/ProfileSectionsWrapper'
 import Link from 'next/link'
+import AddressSection from '@/src/components/profile/AddressSection'
 
-export default async function Page() {
+export default async function AddressesPage() {
   const session = await auth()
   if (!session?.user.id) redirect('/sign-in')
   const userId = session?.user?.id 
   
   const user = await getUserAction(userId)
   if (!user) redirect('/sign-in')
+  
+  const addresses = await getUserAddressesAction(userId).catch(() => [])
+  
   return (
     <main className="w-full flex-1 mx-auto max-w-5xl px-4 py-8 flex flex-col gap-8 md:flex-row">
       {/* Colonne gauche : résumé du profil + navigation compte */}
@@ -41,13 +44,13 @@ export default async function Page() {
           >
             <Link 
               href="/profile"
-              className="w-full text-left px-3 py-2 rounded-md bg-slate-100 font-medium transition block"
+              className="w-full text-left px-3 py-2 rounded-md hover:bg-slate-100 transition block"
             >
               Mes informations
             </Link>
             <Link 
               href="/profile/addresses"
-              className="w-full text-left px-3 py-2 rounded-md hover:bg-slate-100 transition block"
+              className="w-full text-left px-3 py-2 rounded-md bg-slate-100 font-medium transition block"
             >
               Mes adresses
             </Link>
@@ -61,38 +64,20 @@ export default async function Page() {
         </Card>
       </section>
 
-      {/* Colonne droite : informations détaillées + formulaire d’édition */}
+      {/* Colonne droite : gestion des adresses */}
       <section className="w-full md:flex-1">
-        <div className="mb-4">
+        <div className="mb-4 text-white">
           <h2 className="text-2xl font-bold tracking-tight">
-            Mes informations personnelles
+            Mes adresses
           </h2>
-          <p className="text-sm text-muted-foreground mt-1">
-            Gérez les informations visibles sur votre compte.
+          <p className="text-sm mt-1">
+            Gérez vos adresses de facturation et de livraison.
           </p>
         </div>
         <Separator className="mb-4" />
 
-        <div className="flex flex-col lg:flex-row gap-6 items-start">
-          <div className="flex-1 flex items-center flex-col items-start gap-3">
-            <Image
-              src={user.image && user.image !== 'NULL' ? user.image : defaultImage}
-              alt="Avatar"
-              width={128}
-              height={128}
-              className="w-32 h-32 rounded-full object-cover"
-            />
-            <div className="space-y-1">
-              <p className="text-base font-semibold">
-                {user.firstName} {user.lastName}
-              </p>
-              <p className="text-sm text-muted-foreground">{user?.email}</p>
-            </div>
-          </div>
-
-          <div className="flex-1 flex flex-col gap-4">
-            <ProfileSectionsWrapper user={user} />
-          </div>
+        <div className="flex flex-col gap-4">
+          <AddressSection userId={userId} initialAddresses={addresses} />
         </div>
       </section>
     </main>

@@ -2,24 +2,11 @@
 
 import ProfileSections, { type SectionConfig } from "./ProfileSections";
 import ProfileForm from "./ProfileForm";
-import AddressSection from "./AddressSection";
 import {
   updateUserAction,
   updateUserEmailAction,
   changePasswordAction,
 } from "@/app/api/users/user.action";
-type PostalAddress = {
-  id: string;
-  userId: string;
-  street: string;
-  postalCode: string;
-  city: string;
-  country: string;
-  isDefaultBilling: boolean;
-  isDefaultShipping: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-};
 
 type ProfileUser = {
   id: string;
@@ -93,12 +80,10 @@ const sections: SectionConfig[] = [
 
 type ProfileSectionsWrapperProps = {
   user: ProfileUser;
-  addresses: PostalAddress[];
 };
 
 export default function ProfileSectionsWrapper({
   user,
-  addresses,
 }: ProfileSectionsWrapperProps) {
   return (
     <div className="flex flex-col gap-6">
@@ -117,7 +102,6 @@ export default function ProfileSectionsWrapper({
           );
         }}
       />
-      <AddressSection userId={user.id} initialAddresses={addresses} />
     </div>
   );
 }
