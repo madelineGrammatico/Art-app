@@ -20,6 +20,7 @@ model Artwork {
   invoice       Invoice[]
   certificateId String?       @unique
   certificate   Certificate?
+  basketItems   BasketItem[]
   createdAt     DateTime      @default(now())
 
   @@index([ownerId])
@@ -76,6 +77,7 @@ model User {
   sessions            Session[]
   refreshTokens       RefreshToken[]
   postalAddresses     PostalAddress[]
+  basket              Basket?
 
   createdAt           DateTime              @default(now())
   updatedAt           DateTime              @updatedAt
@@ -148,6 +150,31 @@ model PostalAddress {
   updatedAt        DateTime  @updatedAt
 
   @@index([userId])
+}
+
+model Basket {
+  id        String       @id @default(uuid())
+  userId    String       @unique
+  user      User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items     BasketItem[]
+  createdAt DateTime     @default(now())
+  updatedAt DateTime     @updatedAt
+
+  @@index([userId])
+}
+
+model BasketItem {
+  id        String   @id @default(uuid())
+  basketId  String
+  basket    Basket   @relation(fields: [basketId], references: [id], onDelete: Cascade)
+  artworkId String
+  artwork   Artwork  @relation(fields: [artworkId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([basketId, artworkId])
+  @@index([basketId])
+  @@index([artworkId])
 }
  
 // model VerificationToken {

@@ -57,9 +57,12 @@ export default async function AddressesPage() {
             <button className="w-full text-left px-3 py-2 rounded-md hover:bg-slate-100 transition">
               Mes commandes
             </button>
-            <button className="w-full text-left px-3 py-2 rounded-md hover:bg-slate-100 transition">
+            <Link 
+              href="/profile/basket"
+              className="w-full text-left px-3 py-2 rounded-md hover:bg-slate-100 transition block"
+            >
               Mon panier
-            </button>
+            </Link>
           </nav>
         </Card>
       </section>

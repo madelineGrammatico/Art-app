@@ -16,7 +16,7 @@ export default async function Porfolio() {
         { artworks.map((artwork, index)=> 
          
           
-            <VerticalCard title={artwork.title} linkPage={`/preview/${artwork.id}`}  index={index} key={artwork.id}/>
+            <VerticalCard title={artwork.title} linkPage={`/preview/${artwork.id}`}  index={index} artworkId={artwork.id} key={artwork.id}/>
           
           // </Link>
         )}  
