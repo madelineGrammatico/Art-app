@@ -41,17 +41,20 @@ enum InvoiceStatus {
 }
 
 model Invoice {
-  id          String        @id @default(uuid())
-  artworkId   String
-  artwork     Artwork       @relation(fields: [artworkId], references: [id])
-  buyerId     String
-  buyer       User          @relation(fields: [buyerId], references: [id], onDelete: Restrict)
-  createdAt   DateTime      @default(now())
-  amount      Decimal      
-  status      InvoiceStatus
+  id                   String        @id @default(uuid())
+  artworkId            String
+  artwork              Artwork       @relation(fields: [artworkId], references: [id])
+  buyerId              String
+  buyer                User          @relation(fields: [buyerId], references: [id], onDelete: Restrict)
+  createdAt            DateTime      @default(now())
+  amount               Decimal      
+  status               InvoiceStatus
+  stripeSessionId      String?       @unique
+  stripePaymentIntentId String?      @unique
 
   @@index([buyerId])
   @@index([artworkId])
+  @@index([stripeSessionId])
 }
 
 enum UserRole {

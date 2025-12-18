@@ -263,12 +263,13 @@ export const confirmBasketAction = async (userId: string) => {
       )
     )
 
-    // Vider le panier après confirmation
-    await prisma.basketItem.deleteMany({
-      where: { basketId: basket.id }
-    })
+    // Ne pas vider le panier immédiatement - sera vidé après paiement réussi via webhook
 
-    return { success: true, invoicesCount: invoices.length }
+    return { 
+      success: true, 
+      invoicesCount: invoices.length,
+      invoiceIds: invoices.map(inv => inv.id)
+    }
   } catch (error) {
     console.error(error)
     return { error: error instanceof Error ? error.message : "Erreur lors de la confirmation du panier" }
