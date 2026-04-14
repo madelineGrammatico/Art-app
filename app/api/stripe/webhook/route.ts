@@ -19,70 +19,49 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "Invalid signature" }, { status: 400 })
     }
 
-    // Gérer les différents types d'événements
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as Stripe.Checkout.Session
 
-      // Récupérer les invoices associées à cette session
-      const invoices = await prisma.invoice.findMany({
-        where: {
-          stripeSessionId: session.id,
-          status: "PENDING"
-        },
-        include: {
-          artwork: true
-        }
-      })
-
-      if (invoices.length > 0) {
-        // Mettre à jour le statut des invoices à PAID
-        await prisma.invoice.updateMany({
+      await prisma.$transaction(async (tx) => {
+        const updated = await tx.invoice.updateMany({
           where: {
-            id: { in: invoices.map(inv => inv.id) }
+            stripeSessionId: session.id,
+            status: "PENDING"
           },
           data: {
             status: "PAID",
             stripePaymentIntentId: session.payment_intent as string | null
           }
         })
+        if (updated.count === 0) return
 
-        // Assigner les artworks à l'acheteur
-        for (const invoice of invoices) {
-          // Vérifier que l'artwork est toujours disponible
-          if (invoice.artwork.ownerId === null) {
-            await prisma.artwork.update({
-              where: { id: invoice.artworkId },
-              data: { ownerId: invoice.buyerId }
-            })
+        const invoices = await tx.invoice.findMany({
+          where : {
+            stripeSessionId:session.id,
+            status: "PAID"
           }
-        }
-
-        // Vider le panier de l'utilisateur après paiement réussi
-        const userId = invoices[0].buyerId
-        const basket = await prisma.basket.findUnique({
-          where: { userId }
         })
 
-        if (basket) {
-          await prisma.basketItem.deleteMany({
-            where: { basketId: basket.id }
+        for (const invoice of invoices) {
+          await tx.artwork.updateMany({
+            where: {
+              id: invoice.artworkId,
+              ownerId: null
+            },
+            data: { ownerId: invoice.buyerId}
           })
         }
-      }
-    } else if (event.type === "payment_intent.succeeded") {
-      const paymentIntent = event.data.object as Stripe.PaymentIntent
-
-      // Mettre à jour les invoices avec le payment intent ID si nécessaire
-      await prisma.invoice.updateMany({
-        where: {
-          stripePaymentIntentId: paymentIntent.id
-        },
-        data: {
-          status: "PAID"
+        const basket = await tx.basket.findUnique({
+          where: { userId: invoices[0].buyerId }
+        })
+        if (basket) {
+          await tx.basketItem.deleteMany({
+            where: {basketId: basket.id}
+          })
         }
       })
     }
-
+    
     return NextResponse.json({ received: true })
   } catch (error) {
     console.error("Error processing webhook:", error)
