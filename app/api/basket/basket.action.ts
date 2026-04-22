@@ -249,6 +249,15 @@ export const confirmBasketAction = async (userId: string) => {
       throw new Error(`${unavailableArtworks.length} oeuvre${unavailableArtworks.length > 1 ? 's' : ''} n'est plus disponible`)
     }
 
+    // Supprimer les invoices PENDING existantes pour ces artworks
+    await prisma.invoice.deleteMany({
+      where: {
+        buyerId: userId,
+        status: "PENDING",
+        artworkId: { in: basket.items.map(item => item.artworkId) }
+      }
+    })
+
     // Créer une invoice pour chaque artwork du panier
     const invoices = await Promise.all(
       basket.items.map(item =>
