@@ -34,6 +34,8 @@ CREATE TABLE "Invoice" (
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "amount" DECIMAL(65,30) NOT NULL,
     "status" "InvoiceStatus" NOT NULL,
+    "stripeSessionId" TEXT,
+    "stripePaymentIntentId" TEXT,
 
     CONSTRAINT "Invoice_pkey" PRIMARY KEY ("id")
 );
@@ -124,6 +126,27 @@ CREATE TABLE "PostalAddress" (
     CONSTRAINT "PostalAddress_pkey" PRIMARY KEY ("id")
 );
 
+-- CreateTable
+CREATE TABLE "Basket" (
+    "id" TEXT NOT NULL,
+    "userId" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Basket_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "BasketItem" (
+    "id" TEXT NOT NULL,
+    "basketId" TEXT NOT NULL,
+    "artworkId" TEXT NOT NULL,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "BasketItem_pkey" PRIMARY KEY ("id")
+);
+
 -- CreateIndex
 CREATE UNIQUE INDEX "Artwork_certificateId_key" ON "Artwork"("certificateId");
 
@@ -138,6 +161,9 @@ CREATE INDEX "Invoice_buyerId_idx" ON "Invoice"("buyerId");
 
 -- CreateIndex
 CREATE INDEX "Invoice_artworkId_idx" ON "Invoice"("artworkId");
+
+-- CreateIndex
+CREATE INDEX "Invoice_stripeSessionId_idx" ON "Invoice"("stripeSessionId");
 
 -- CreateIndex
 CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
@@ -162,6 +188,21 @@ CREATE INDEX "Session_userId_idx" ON "Session"("userId");
 
 -- CreateIndex
 CREATE INDEX "PostalAddress_userId_idx" ON "PostalAddress"("userId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Basket_userId_key" ON "Basket"("userId");
+
+-- CreateIndex
+CREATE INDEX "Basket_userId_idx" ON "Basket"("userId");
+
+-- CreateIndex
+CREATE INDEX "BasketItem_basketId_idx" ON "BasketItem"("basketId");
+
+-- CreateIndex
+CREATE INDEX "BasketItem_artworkId_idx" ON "BasketItem"("artworkId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "BasketItem_basketId_artworkId_key" ON "BasketItem"("basketId", "artworkId");
 
 -- AddForeignKey
 ALTER TABLE "Artwork" ADD CONSTRAINT "Artwork_ownerId_fkey" FOREIGN KEY ("ownerId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
@@ -190,3 +231,11 @@ ALTER TABLE "Session" ADD CONSTRAINT "Session_userId_fkey" FOREIGN KEY ("userId"
 -- AddForeignKey
 ALTER TABLE "PostalAddress" ADD CONSTRAINT "PostalAddress_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
+-- AddForeignKey
+ALTER TABLE "Basket" ADD CONSTRAINT "Basket_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "BasketItem" ADD CONSTRAINT "BasketItem_basketId_fkey" FOREIGN KEY ("basketId") REFERENCES "Basket"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "BasketItem" ADD CONSTRAINT "BasketItem_artworkId_fkey" FOREIGN KEY ("artworkId") REFERENCES "Artwork"("id") ON DELETE CASCADE ON UPDATE CASCADE;

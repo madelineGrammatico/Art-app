@@ -49,8 +49,8 @@ model Invoice {
   createdAt            DateTime      @default(now())
   amount               Decimal      
   status               InvoiceStatus
-  stripeSessionId      String?       @unique
-  stripePaymentIntentId String?      @unique
+  stripeSessionId      String?
+  stripePaymentIntentId String?
 
   @@index([buyerId])
   @@index([artworkId])
