@@ -1,12 +1,12 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { auth } from "@/src/lib/auth/auth"
 import { prisma } from "@/src/lib/prisma"
 import { stripe, CURRENCY } from "@/src/lib/stripe/stripe"
 
-export async function POST(request: NextRequest) {
+export async function POST() {
   try {
     const session = await auth()
-    if (!session || !session.user) {
+    if (!session || !session.user || !session.user.id) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
     }
 
@@ -51,9 +51,6 @@ export async function POST(request: NextRequest) {
       },
       quantity: 1
     }))
-
-    // Calculer le total
-    const totalAmount = invoices.reduce((sum, inv) => sum + Number(inv.amount), 0)
 
     // Créer la session Stripe Checkout
     const checkoutSession = await stripe.checkout.sessions.create({

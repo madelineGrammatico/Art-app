@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest"
-import { NextRequest } from "next/server"
+import type Stripe from "stripe"
 
 vi.mock("@/src/lib/auth/auth", () => ({ auth: vi.fn() }))
 vi.mock("@/src/lib/stripe/stripe", () => ({
@@ -19,10 +19,6 @@ import { sessionFor } from "@/src/test/auth-mock"
 const mockedAuth = vi.mocked(auth)
 const mockedCreateSession = vi.mocked(stripe.checkout.sessions.create)
 
-function makeRequest() {
-  return new NextRequest("http://localhost/api/stripe/create-checkout-session", { method: "POST" })
-}
-
 beforeEach(() => {
   mockedAuth.mockReset()
   mockedCreateSession.mockReset()
@@ -32,7 +28,7 @@ describe("POST /api/stripe/create-checkout-session", () => {
   it("returns 401 when no session", async () => {
     mockedAuth.mockResolvedValue(null as never)
 
-    const res = await POST(makeRequest())
+    const res = await POST()
 
     expect(res.status).toBe(401)
     expect(await res.json()).toEqual({ error: "Non autorisé" })
@@ -43,7 +39,7 @@ describe("POST /api/stripe/create-checkout-session", () => {
     const user = await createUser()
     mockedAuth.mockResolvedValue(sessionFor({ id: user.id }) as never)
 
-    const res = await POST(makeRequest())
+    const res = await POST()
 
     expect(res.status).toBe(400)
     expect(await res.json()).toEqual({ error: "Aucune commande en attente" })
@@ -59,7 +55,7 @@ describe("POST /api/stripe/create-checkout-session", () => {
     await createPendingInvoice({ buyerId: buyer.id, artworkId: sold.id, amount: 200 })
     mockedAuth.mockResolvedValue(sessionFor({ id: buyer.id }) as never)
 
-    const res = await POST(makeRequest())
+    const res = await POST()
 
     expect(res.status).toBe(400)
     expect((await res.json()).error).toMatch(/n'est plus disponible/)
@@ -78,7 +74,7 @@ describe("POST /api/stripe/create-checkout-session", () => {
       url: "https://checkout.stripe.com/test_session",
     } as never)
 
-    const res = await POST(makeRequest())
+    const res = await POST()
 
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({
@@ -87,11 +83,11 @@ describe("POST /api/stripe/create-checkout-session", () => {
     })
 
     expect(mockedCreateSession).toHaveBeenCalledOnce()
-    const callArg = mockedCreateSession.mock.calls[0][0]
+    const callArg = mockedCreateSession.mock.calls[0]![0] as Stripe.Checkout.SessionCreateParams
     expect(callArg.mode).toBe("payment")
     expect(callArg.customer_email).toBe("buyer@test.local")
     expect(callArg.line_items).toHaveLength(2)
-    const amounts = callArg.line_items!.map((li) => (li as { price_data: { unit_amount: number } }).price_data.unit_amount)
+    const amounts = callArg.line_items!.map((li) => li.price_data!.unit_amount)
     expect(amounts).toContain(10000)
     expect(amounts).toContain(24999)
 
@@ -108,7 +104,7 @@ describe("POST /api/stripe/create-checkout-session", () => {
     mockedAuth.mockResolvedValue(sessionFor({ id: buyer.id }) as never)
     mockedCreateSession.mockRejectedValue(new Error("Stripe is down"))
 
-    const res = await POST(makeRequest())
+    const res = await POST()
 
     expect(res.status).toBe(500)
     expect((await res.json()).error).toMatch(/Erreur/)

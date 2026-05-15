@@ -13,7 +13,6 @@ export default defineConfig({
     globalSetup: ["./src/test/global-setup.ts"],
     setupFiles: ["./src/test/setup.ts"],
     pool: "forks",
-    singleFork: true,
     fileParallelism: false,
     include: ["src/**/*.test.ts", "app/**/*.test.ts"],
   },
