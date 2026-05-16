@@ -142,4 +142,61 @@ describe("POST /api/stripe/webhook", () => {
     const stillOwnedByOther = await prisma.artwork.findUnique({ where: { id: artwork.id } })
     expect(stillOwnedByOther?.ownerId).toBe(otherBuyer.id)
   })
+
+  it("on multi-item checkout: marks ALL invoices PAID and transfers ALL artworks", async () => {
+    const buyer = await createUser()
+    const a1 = await createArtwork({ price: 100 })
+    const a2 = await createArtwork({ price: 200 })
+    const a3 = await createArtwork({ price: 300 })
+    const sessionId = "cs_test_multi"
+    await createPendingInvoice({
+      buyerId: buyer.id,
+      artworkId: a1.id,
+      amount: 100,
+      stripeSessionId: sessionId,
+    })
+    await createPendingInvoice({
+      buyerId: buyer.id,
+      artworkId: a2.id,
+      amount: 200,
+      stripeSessionId: sessionId,
+    })
+    await createPendingInvoice({
+      buyerId: buyer.id,
+      artworkId: a3.id,
+      amount: 300,
+      stripeSessionId: sessionId,
+    })
+    await prisma.basket.create({
+      data: {
+        userId: buyer.id,
+        items: {
+          create: [{ artworkId: a1.id }, { artworkId: a2.id }, { artworkId: a3.id }],
+        },
+      },
+    })
+
+    mockedVerify.mockResolvedValue(
+      makeCheckoutCompletedEvent({ sessionId, paymentIntentId: "pi_test_multi" })
+    )
+
+    const res = await POST(makeRequest())
+
+    expect(res.status).toBe(200)
+
+    const invoices = await prisma.invoice.findMany({ where: { stripeSessionId: sessionId } })
+    expect(invoices).toHaveLength(3)
+    expect(invoices.every((i) => i.status === "PAID")).toBe(true)
+    expect(invoices.every((i) => i.stripePaymentIntentId === "pi_test_multi")).toBe(true)
+
+    const artworks = await prisma.artwork.findMany({
+      where: { id: { in: [a1.id, a2.id, a3.id] } },
+    })
+    expect(artworks.every((a) => a.ownerId === buyer.id)).toBe(true)
+
+    const basketItems = await prisma.basketItem.findMany({
+      where: { basket: { userId: buyer.id } },
+    })
+    expect(basketItems).toHaveLength(0)
+  })
 })
