@@ -38,6 +38,7 @@ enum InvoiceStatus {
   PENDING
   PAID
   CANCELLED
+  REFUNDED
 }
 
 model Invoice {
@@ -47,11 +48,12 @@ model Invoice {
   buyerId              String
   buyer                User          @relation(fields: [buyerId], references: [id], onDelete: Restrict)
   createdAt            DateTime      @default(now())
-  amount               Decimal      
+  amount               Decimal
   status               InvoiceStatus
   stripeSessionId      String?
   stripePaymentIntentId String?
 
+  @@unique([stripeSessionId, artworkId])
   @@index([buyerId])
   @@index([artworkId])
   @@index([stripeSessionId])
