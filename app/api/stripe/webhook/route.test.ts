@@ -34,6 +34,28 @@ function makeCheckoutCompletedEvent(args: {
   } as Stripe.Event
 }
 
+function makeCheckoutExpiredEvent(args: { sessionId: string }): Stripe.Event {
+  return {
+    id: "evt_test_expired_" + args.sessionId,
+    type: "checkout.session.expired",
+    data: {
+      object: {
+        id: args.sessionId,
+      } as Stripe.Checkout.Session,
+    },
+  } as Stripe.Event
+}
+
+function makeUnknownEvent(args: { sessionId: string }): Stripe.Event {
+  return {
+    id: "evt_test_unknown_" + args.sessionId,
+    type: "payment_intent.created",
+    data: {
+      object: { id: args.sessionId } as unknown as Stripe.PaymentIntent,
+    },
+  } as Stripe.Event
+}
+
 function makeRequest(body = "{}") {
   return new NextRequest("http://localhost/api/stripe/webhook", {
     method: "POST",
@@ -141,6 +163,97 @@ describe("POST /api/stripe/webhook", () => {
 
     const stillOwnedByOther = await prisma.artwork.findUnique({ where: { id: artwork.id } })
     expect(stillOwnedByOther?.ownerId).toBe(otherBuyer.id)
+  })
+
+  it("on checkout.session.expired: deletes PENDING invoices for that session", async () => {
+    const buyer = await createUser()
+    const a1 = await createArtwork()
+    const a2 = await createArtwork()
+    const sessionId = "cs_test_expired"
+    await createPendingInvoice({
+      buyerId: buyer.id,
+      artworkId: a1.id,
+      stripeSessionId: sessionId,
+    })
+    await createPendingInvoice({
+      buyerId: buyer.id,
+      artworkId: a2.id,
+      stripeSessionId: sessionId,
+    })
+
+    mockedVerify.mockResolvedValue(makeCheckoutExpiredEvent({ sessionId }))
+
+    const res = await POST(makeRequest())
+
+    expect(res.status).toBe(200)
+    const remaining = await prisma.invoice.findMany({ where: { stripeSessionId: sessionId } })
+    expect(remaining).toHaveLength(0)
+  })
+
+  it("on checkout.session.expired: does NOT touch PAID invoices (safety)", async () => {
+    const buyer = await createUser()
+    const artwork = await createArtwork()
+    const sessionId = "cs_test_expired_safe"
+    const paidInvoice = await prisma.invoice.create({
+      data: {
+        buyerId: buyer.id,
+        artworkId: artwork.id,
+        amount: 100,
+        status: "PAID",
+        stripeSessionId: sessionId,
+      },
+    })
+
+    mockedVerify.mockResolvedValue(makeCheckoutExpiredEvent({ sessionId }))
+
+    const res = await POST(makeRequest())
+
+    expect(res.status).toBe(200)
+    const still = await prisma.invoice.findUnique({ where: { id: paidInvoice.id } })
+    expect(still?.status).toBe("PAID")
+  })
+
+  it("on checkout.session.expired: leaves the basket untouched so user can retry", async () => {
+    const buyer = await createUser()
+    const artwork = await createArtwork()
+    const sessionId = "cs_test_expired_basket"
+    await createPendingInvoice({
+      buyerId: buyer.id,
+      artworkId: artwork.id,
+      stripeSessionId: sessionId,
+    })
+    await createBasketWithItem({ userId: buyer.id, artworkId: artwork.id })
+
+    mockedVerify.mockResolvedValue(makeCheckoutExpiredEvent({ sessionId }))
+
+    const res = await POST(makeRequest())
+
+    expect(res.status).toBe(200)
+    const basketItems = await prisma.basketItem.findMany({
+      where: { basket: { userId: buyer.id } },
+    })
+    expect(basketItems).toHaveLength(1)
+    expect(basketItems[0].artworkId).toBe(artwork.id)
+  })
+
+  it("returns 200 for unknown event types without modifying any data", async () => {
+    const buyer = await createUser()
+    const artwork = await createArtwork()
+    const sessionId = "cs_test_unknown"
+    const pending = await createPendingInvoice({
+      buyerId: buyer.id,
+      artworkId: artwork.id,
+      stripeSessionId: sessionId,
+    })
+
+    mockedVerify.mockResolvedValue(makeUnknownEvent({ sessionId }))
+
+    const res = await POST(makeRequest())
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ received: true })
+    const unchanged = await prisma.invoice.findUnique({ where: { id: pending.id } })
+    expect(unchanged?.status).toBe("PENDING")
   })
 
   it("on multi-item checkout: marks ALL invoices PAID and transfers ALL artworks", async () => {

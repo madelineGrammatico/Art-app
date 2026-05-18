@@ -60,8 +60,17 @@ export async function POST(request: NextRequest) {
           })
         }
       })
+    } else if (event.type === "checkout.session.expired") {
+      const session = event.data.object as Stripe.Checkout.Session
+
+      await prisma.invoice.deleteMany({
+        where: {
+          stripeSessionId: session.id,
+          status: "PENDING"
+        }
+      })
     }
-    
+
     return NextResponse.json({ received: true })
   } catch (error) {
     console.error("Error processing webhook:", error)
