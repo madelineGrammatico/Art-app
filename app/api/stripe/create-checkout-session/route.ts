@@ -12,23 +12,20 @@ export async function POST() {
 
     const userId = session.user.id
 
-    // Récupérer toutes les invoices PENDING de l'utilisateur
-    const invoices = await prisma.invoice.findMany({
-      where: {
-        buyerId: userId,
-        status: "PENDING"
-      },
+    const basket = await prisma.basket.findUnique({
+      where: { userId },
       include: {
-        artwork: true
+        items: {
+          include: { artwork: true }
+        }
       }
     })
 
-    if (invoices.length === 0) {
+    if (!basket || basket.items.length === 0) {
       return NextResponse.json({ error: "Aucune commande en attente" }, { status: 400 })
     }
 
-    // Vérifier que tous les artworks sont encore disponibles
-    const unavailableArtworks = invoices.filter(inv => inv.artwork.ownerId !== null)
+    const unavailableArtworks = basket.items.filter(item => item.artwork.ownerId !== null)
     if (unavailableArtworks.length > 0) {
       return NextResponse.json(
         { error: `${unavailableArtworks.length} oeuvre${unavailableArtworks.length > 1 ? 's' : ''} n'est plus disponible` },
@@ -36,23 +33,21 @@ export async function POST() {
       )
     }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL ||
       (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000")
 
-    // Créer les line items pour Stripe Checkout
-    const lineItems = invoices.map(invoice => ({
+    const lineItems = basket.items.map(item => ({
       price_data: {
         currency: CURRENCY,
         product_data: {
-          name: invoice.artwork.title,
-          description: `Oeuvre d'art - ${invoice.artwork.title}`
+          name: item.artwork.title,
+          description: `Oeuvre d'art - ${item.artwork.title}`
         },
-        unit_amount: Math.round(Number(invoice.amount) * 100) // Convertir en centimes
+        unit_amount: Math.round(Number(item.artwork.price) * 100)
       },
       quantity: 1
     }))
 
-    // Créer la session Stripe Checkout
     const checkoutSession = await stripe.checkout.sessions.create({
       mode: "payment",
       line_items: lineItems,
@@ -60,22 +55,12 @@ export async function POST() {
       cancel_url: `${appUrl}/profile/checkout/cancel`,
       customer_email: session.user.email || undefined,
       metadata: {
-        userId: userId,
-        invoiceIds: invoices.map(inv => inv.id).join(",")
+        userId,
+        artworkIds: basket.items.map(item => item.artworkId).join(",")
       }
     })
 
-    // Mettre à jour les invoices avec le stripeSessionId
-    await prisma.invoice.updateMany({
-      where: {
-        id: { in: invoices.map(inv => inv.id) }
-      },
-      data: {
-        stripeSessionId: checkoutSession.id
-      }
-    })
-
-    return NextResponse.json({ 
+    return NextResponse.json({
       url: checkoutSession.url,
       sessionId: checkoutSession.id
     })

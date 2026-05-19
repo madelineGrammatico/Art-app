@@ -18,33 +18,29 @@ export default async function CheckoutPage() {
   const user = await getUserAction(userId)
   if (!user) redirect('/sign-in')
   
-  // Récupérer les invoices PENDING de l'utilisateur
-  const invoices = await prisma.invoice.findMany({
-    where: {
-      buyerId: userId,
-      status: "PENDING"
-    },
+  // Récupérer le panier de l'utilisateur (source de vérité pour le récap)
+  const basket = await prisma.basket.findUnique({
+    where: { userId },
     include: {
-      artwork: true
-    },
-    orderBy: {
-      createdAt: "desc"
+      items: {
+        include: { artwork: true },
+        orderBy: { createdAt: "desc" }
+      }
     }
   })
 
-  // Convertir les Decimal en nombres
-  const invoicesWithNumberPrice = invoices.map(invoice => ({
-    ...invoice,
-    amount: Number(invoice.amount),
+  const items = (basket?.items ?? []).map(item => ({
+    id: item.id,
+    amount: Number(item.artwork.price),
     artwork: {
-      ...invoice.artwork,
-      price: Number(invoice.artwork.price)
-    }
+      id: item.artwork.id,
+      title: item.artwork.title,
+    },
   }))
 
-  const total = invoicesWithNumberPrice.reduce((sum, inv) => sum + inv.amount, 0)
+  const total = items.reduce((sum, it) => sum + it.amount, 0)
 
-  if (invoices.length === 0) {
+  if (items.length === 0) {
     return (
       <main className="w-full flex-1 mx-auto max-w-5xl px-4 py-8">
         <Card className="p-8 text-center">
@@ -119,17 +115,17 @@ export default async function CheckoutPage() {
         <Separator className="mb-4" />
 
         <div className="flex flex-col gap-4">
-          {invoicesWithNumberPrice.map((invoice) => (
-            <Card key={invoice.id} className="p-4">
+          {items.map((item) => (
+            <Card key={item.id} className="p-4">
               <div className="flex justify-between items-start">
                 <div>
-                  <h3 className="font-semibold text-lg">{invoice.artwork.title}</h3>
+                  <h3 className="font-semibold text-lg">{item.artwork.title}</h3>
                   <p className="text-sm text-muted-foreground">
-                    Prix : {invoice.amount.toFixed(2)} €
+                    Prix : {item.amount.toFixed(2)} €
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="font-semibold">{invoice.amount.toFixed(2)} €</p>
+                  <p className="font-semibold">{item.amount.toFixed(2)} €</p>
                 </div>
               </div>
             </Card>

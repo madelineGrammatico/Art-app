@@ -13,7 +13,7 @@ import {
 } from "./basket.action"
 import { auth } from "@/src/lib/auth/auth"
 import { prisma } from "@/src/lib/prisma"
-import { createUser, createArtwork, createPendingInvoice, createBasketWithItem } from "@/src/test/factories"
+import { createUser, createArtwork, createBasketWithItem } from "@/src/test/factories"
 import { sessionFor } from "@/src/test/auth-mock"
 
 const mockedAuth = vi.mocked(auth)
@@ -253,7 +253,7 @@ describe("confirmBasketAction", () => {
     expect(invoices).toHaveLength(0)
   })
 
-  it("creates one PENDING invoice per basket item without emptying the basket", async () => {
+  it("returns success + itemsCount when basket is valid (no DB write)", async () => {
     const buyer = await createUser()
     const a1 = await createArtwork({ price: 100 })
     const a2 = await createArtwork({ price: 250 })
@@ -268,31 +268,12 @@ describe("confirmBasketAction", () => {
     const res = await confirmBasketAction(buyer.id)
 
     expect(res.success).toBe(true)
-    expect(res.invoicesCount).toBe(2)
+    expect(res.itemsCount).toBe(2)
 
     const invoices = await prisma.invoice.findMany({ where: { buyerId: buyer.id } })
-    expect(invoices).toHaveLength(2)
-    expect(invoices.every((i) => i.status === "PENDING")).toBe(true)
+    expect(invoices).toHaveLength(0)
 
     const stillInBasket = await prisma.basketItem.findMany({ where: { basket: { userId: buyer.id } } })
     expect(stillInBasket).toHaveLength(2)
-  })
-
-  it("replaces previous PENDING invoices instead of duplicating them", async () => {
-    const buyer = await createUser()
-    const artwork = await createArtwork({ price: 100 })
-    await createPendingInvoice({ buyerId: buyer.id, artworkId: artwork.id })
-    await prisma.basket.create({
-      data: { userId: buyer.id, items: { create: { artworkId: artwork.id } } },
-    })
-    mockedAuth.mockResolvedValue(sessionFor({ id: buyer.id }) as never)
-
-    const res = await confirmBasketAction(buyer.id)
-
-    expect(res.success).toBe(true)
-    const invoices = await prisma.invoice.findMany({
-      where: { buyerId: buyer.id, artworkId: artwork.id },
-    })
-    expect(invoices).toHaveLength(1)
   })
 })

@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server"
-// import { stripe } from "@/src/lib/stripe/stripe"
 import { prisma } from "@/src/lib/prisma"
+import { stripe } from "@/src/lib/stripe/stripe"
 import { verifyWebhookSignature } from "@/src/lib/stripe/webhook-handler"
 import Stripe from "stripe"
+import { Prisma } from "@prisma/client"
+
+type RefundFailure = {
+  artworkId: string
+  amountCents: number
+}
 
 export async function POST(request: NextRequest) {
   try {
@@ -21,52 +27,105 @@ export async function POST(request: NextRequest) {
 
     if (event.type === "checkout.session.completed") {
       const session = event.data.object as Stripe.Checkout.Session
-      await prisma.$transaction(async (tx) => {
-        const updated = await tx.invoice.updateMany({
-          where: {
-            stripeSessionId: session.id,
-            status: "PENDING"
-          },
-          data: {
-            status: "PAID",
-            stripePaymentIntentId: session.payment_intent as string | null
-          }
-        })
-        if (updated.count === 0) return
+      const userId = session.metadata?.userId
+      const artworkIdsRaw = session.metadata?.artworkIds
 
-        const invoices = await tx.invoice.findMany({
-          where : {
-            stripeSessionId:session.id,
-            status: "PAID"
-          }
+      if (!userId || !artworkIdsRaw) {
+        console.error("[webhook] checkout.session.completed missing metadata", {
+          sessionId: session.id,
         })
+        return NextResponse.json({ received: true })
+      }
 
-        for (const invoice of invoices) {
-          await tx.artwork.updateMany({
-            where: {
-              id: invoice.artworkId,
-              ownerId: null
-            },
-            data: { ownerId: invoice.buyerId}
-          })
-        }
-        const basket = await tx.basket.findUnique({
-          where: { userId: invoices[0].buyerId }
-        })
-        if (basket) {
-          await tx.basketItem.deleteMany({
-            where: {basketId: basket.id}
-          })
-        }
+      const artworkIds = artworkIdsRaw.split(",").filter(Boolean)
+      const paymentIntentId = (session.payment_intent as string | null) ?? null
+
+      const alreadyProcessed = await prisma.invoice.findFirst({
+        where: { stripeSessionId: session.id },
       })
+      if (alreadyProcessed) {
+        return NextResponse.json({ received: true })
+      }
+
+      const failures: RefundFailure[] = []
+
+      try {
+        await prisma.$transaction(async (tx) => {
+          for (const artworkId of artworkIds) {
+            const artwork = await tx.artwork.findUnique({ where: { id: artworkId } })
+            if (!artwork) continue
+
+            const transferred = await tx.artwork.updateMany({
+              where: { id: artworkId, ownerId: null },
+              data: { ownerId: userId },
+            })
+
+            const status = transferred.count > 0 ? "PAID" : "REFUNDED"
+
+            await tx.invoice.create({
+              data: {
+                buyerId: userId,
+                artworkId,
+                amount: artwork.price,
+                status,
+                stripeSessionId: session.id,
+                stripePaymentIntentId: paymentIntentId,
+              },
+            })
+
+            if (status === "REFUNDED") {
+              failures.push({
+                artworkId,
+                amountCents: Math.round(Number(artwork.price) * 100),
+              })
+            }
+          }
+
+          const basket = await tx.basket.findUnique({ where: { userId } })
+          if (basket) {
+            await tx.basketItem.deleteMany({ where: { basketId: basket.id } })
+          }
+        })
+      } catch (err) {
+        if (
+          err instanceof Prisma.PrismaClientKnownRequestError &&
+          err.code === "P2002"
+        ) {
+          return NextResponse.json({ received: true })
+        }
+        throw err
+      }
+
+      if (failures.length > 0 && paymentIntentId) {
+        const totalRefundCents = failures.reduce((sum, f) => sum + f.amountCents, 0)
+        try {
+          await stripe.refunds.create({
+            payment_intent: paymentIntentId,
+            amount: totalRefundCents,
+          })
+          console.warn("[webhook] partial refund issued", {
+            sessionId: session.id,
+            userId,
+            failures,
+            totalRefundCents,
+          })
+        } catch (refundErr) {
+          console.error("[webhook] Stripe refund failed", {
+            sessionId: session.id,
+            userId,
+            failures,
+            error: refundErr instanceof Error ? refundErr.message : refundErr,
+          })
+        }
+      }
     } else if (event.type === "checkout.session.expired") {
       const session = event.data.object as Stripe.Checkout.Session
 
       await prisma.invoice.deleteMany({
         where: {
           stripeSessionId: session.id,
-          status: "PENDING"
-        }
+          status: "PENDING",
+        },
       })
     }
 
