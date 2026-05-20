@@ -26,14 +26,14 @@ export default async function CheckoutSuccessPage({ searchParams }: PageProps) {
   const params = await searchParams
   const sessionId = params.session_id
 
-  // Récupérer les invoices payées récemment (dernières 5 minutes)
-  const recentPaidInvoices = await prisma.invoice.findMany({
+  // Récupérer les invoices traitées récemment (PAID ou REFUNDED, dernières 5 minutes)
+  const recentInvoices = await prisma.invoice.findMany({
     where: {
       buyerId: userId,
-      status: "PAID",
+      status: { in: ["PAID", "REFUNDED"] },
       ...(sessionId ? { stripeSessionId: sessionId } : {}),
       createdAt: {
-        gte: new Date(Date.now() - 5 * 60 * 1000) // Dernières 5 minutes
+        gte: new Date(Date.now() - 5 * 60 * 1000)
       }
     },
     include: {
@@ -44,16 +44,43 @@ export default async function CheckoutSuccessPage({ searchParams }: PageProps) {
     }
   })
 
-  // Convertir les Decimal en nombres
-  const invoicesWithNumberPrice = recentPaidInvoices.map(invoice => ({
+  const invoicesWithNumberPrice = recentInvoices.map(invoice => ({
     id: invoice.id,
     amount: Number(invoice.amount),
+    status: invoice.status as "PAID" | "REFUNDED",
     artwork: {
       id: invoice.artwork.id,
       title: invoice.artwork.title,
       price: Number(invoice.artwork.price),
     },
   }))
+
+  const hasAnyInvoice = invoicesWithNumberPrice.length > 0
+  const allPaid = hasAnyInvoice && invoicesWithNumberPrice.every(i => i.status === "PAID")
+  const allRefunded = hasAnyInvoice && invoicesWithNumberPrice.every(i => i.status === "REFUNDED")
+  const mixed = hasAnyInvoice && !allPaid && !allRefunded
+
+  const headerTitle = allPaid
+    ? "✓ Paiement réussi"
+    : allRefunded
+    ? "Commande non honorée"
+    : mixed
+    ? "Commande partiellement honorée"
+    : "Confirmation de votre commande"
+
+  const headerSubtitle = allPaid
+    ? "Votre commande a été confirmée avec succès."
+    : allRefunded
+    ? "Aucune oeuvre n'a pu être livrée — paiement intégralement remboursé."
+    : mixed
+    ? "Une partie de votre commande n'a pas pu être livrée."
+    : "Traitement de votre paiement en cours."
+
+  const headerColorClass = allPaid
+    ? "text-green-600"
+    : allRefunded || mixed
+    ? "text-amber-700"
+    : ""
 
   return (
     <main className="w-full flex-1 mx-auto max-w-5xl px-4 py-8 flex flex-col gap-8 md:flex-row">
@@ -107,11 +134,11 @@ export default async function CheckoutSuccessPage({ searchParams }: PageProps) {
       {/* Colonne droite : confirmation de paiement */}
       <section className="w-full md:flex-1">
         <div className="mb-4">
-          <h2 className="text-2xl font-bold tracking-tight text-green-600">
-            ✓ Paiement réussi
+          <h2 className={`text-2xl font-bold tracking-tight ${headerColorClass}`}>
+            {headerTitle}
           </h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Votre commande a été confirmée avec succès.
+            {headerSubtitle}
           </p>
         </div>
         <Separator className="mb-4" />

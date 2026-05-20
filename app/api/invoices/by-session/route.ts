@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
       where: {
         buyerId: session.user.id,
         stripeSessionId: sessionId,
-        status: "PAID",
+        status: { in: ["PAID", "REFUNDED"] },
       },
       include: { artwork: true },
       orderBy: { createdAt: "desc" },

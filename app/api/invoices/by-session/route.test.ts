@@ -44,7 +44,7 @@ describe("GET /api/invoices/by-session", () => {
     expect(await res.json()).toEqual({ error: "sessionId manquant" })
   })
 
-  it("returns empty list when no PAID invoice matches the session", async () => {
+  it("returns empty list when no invoice matches the session", async () => {
     const user = await createUser()
     mockedAuth.mockResolvedValue(sessionFor({ id: user.id }) as never)
 
@@ -112,7 +112,65 @@ describe("GET /api/invoices/by-session", () => {
     expect(await res.json()).toEqual({ invoices: [] })
   })
 
-  it("filters out non-PAID invoices (PENDING / CANCELLED)", async () => {
+  it("includes REFUNDED invoices alongside PAID (mixed scenario)", async () => {
+    const user = await createUser()
+    const paidArt = await createArtwork({ price: 100 })
+    const refundedArt = await createArtwork({ price: 200 })
+    const sessionId = "cs_test_mixed"
+    await prisma.invoice.create({
+      data: {
+        buyerId: user.id,
+        artworkId: paidArt.id,
+        amount: 100,
+        status: "PAID",
+        stripeSessionId: sessionId,
+      },
+    })
+    await prisma.invoice.create({
+      data: {
+        buyerId: user.id,
+        artworkId: refundedArt.id,
+        amount: 200,
+        status: "REFUNDED",
+        stripeSessionId: sessionId,
+      },
+    })
+    mockedAuth.mockResolvedValue(sessionFor({ id: user.id }) as never)
+
+    const res = await GET(makeRequest(sessionId))
+
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.invoices).toHaveLength(2)
+    const statuses = body.invoices.map((i: { status: string }) => i.status).sort()
+    expect(statuses).toEqual(["PAID", "REFUNDED"])
+  })
+
+  it("returns only REFUNDED invoices when the whole order was refunded", async () => {
+    const user = await createUser()
+    const artwork = await createArtwork({ price: 180 })
+    const sessionId = "cs_test_full_refund"
+    await prisma.invoice.create({
+      data: {
+        buyerId: user.id,
+        artworkId: artwork.id,
+        amount: 180,
+        status: "REFUNDED",
+        stripeSessionId: sessionId,
+      },
+    })
+    mockedAuth.mockResolvedValue(sessionFor({ id: user.id }) as never)
+
+    const res = await GET(makeRequest(sessionId))
+
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.invoices).toHaveLength(1)
+    expect(body.invoices[0].status).toBe("REFUNDED")
+    expect(body.invoices[0].amount).toBe(180)
+  })
+
+  it("filters out PENDING and CANCELLED invoices (only PAID and REFUNDED relevant for success page)", async () => {
     const user = await createUser()
     const a1 = await createArtwork()
     const a2 = await createArtwork()
