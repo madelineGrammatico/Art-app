@@ -4,9 +4,12 @@ import { stripe } from "@/src/lib/stripe/stripe"
 import { verifyWebhookSignature } from "@/src/lib/stripe/webhook-handler"
 import Stripe from "stripe"
 import { Prisma } from "@prisma/client"
+import { sendRefundUserMail } from "@/src/lib/mail/refundUserMail"
+import { sendIncidentAdminMail } from "@/src/lib/mail/incidentAdminMail"
 
 type RefundFailure = {
   artworkId: string
+  artworkTitle: string
   amountCents: number
 }
 
@@ -76,6 +79,7 @@ export async function POST(request: NextRequest) {
             if (status === "REFUNDED") {
               failures.push({
                 artworkId,
+                artworkTitle: artwork.title,
                 amountCents: Math.round(Number(artwork.price) * 100),
               })
             }
@@ -98,6 +102,10 @@ export async function POST(request: NextRequest) {
 
       if (failures.length > 0 && paymentIntentId) {
         const totalRefundCents = failures.reduce((sum, f) => sum + f.amountCents, 0)
+
+        let refundOutcome: "issued" | "failed" = "issued"
+        let refundErrorMessage: string | undefined
+
         try {
           await stripe.refunds.create({
             payment_intent: paymentIntentId,
@@ -110,11 +118,72 @@ export async function POST(request: NextRequest) {
             totalRefundCents,
           })
         } catch (refundErr) {
+          refundOutcome = "failed"
+          refundErrorMessage =
+            refundErr instanceof Error ? refundErr.message : String(refundErr)
           console.error("[webhook] Stripe refund failed", {
             sessionId: session.id,
             userId,
             failures,
-            error: refundErr instanceof Error ? refundErr.message : refundErr,
+            error: refundErrorMessage,
+          })
+        }
+
+        const user = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { email: true },
+        })
+
+        const affectedItems = failures.map((f) => ({
+          artworkId: f.artworkId,
+          title: f.artworkTitle,
+          amountEur: f.amountCents / 100,
+        }))
+
+        if (refundOutcome === "issued" && user?.email) {
+          try {
+            const userMailRes = await sendRefundUserMail({
+              to: user.email,
+              refundedItems: affectedItems.map((item) => ({
+                title: item.title,
+                amountEur: item.amountEur,
+              })),
+              totalRefundEur: totalRefundCents / 100,
+              sessionId: session.id,
+            })
+            if (!userMailRes.ok) {
+              console.error("[webhook] refund email to user failed", {
+                sessionId: session.id,
+                error: userMailRes.error,
+              })
+            }
+          } catch (err) {
+            console.error("[webhook] refund email to user threw", {
+              sessionId: session.id,
+              error: err instanceof Error ? err.message : err,
+            })
+          }
+        }
+
+        try {
+          const adminMailRes = await sendIncidentAdminMail({
+            sessionId: session.id,
+            userId,
+            userEmail: user?.email,
+            affectedItems,
+            refundOutcome,
+            refundError: refundErrorMessage,
+          })
+          if (!adminMailRes.ok) {
+            console.error("[webhook] admin alert email failed", {
+              sessionId: session.id,
+              error: adminMailRes.error,
+            })
+          }
+        } catch (err) {
+          console.error("[webhook] admin alert email threw", {
+            sessionId: session.id,
+            error: err instanceof Error ? err.message : err,
           })
         }
       }

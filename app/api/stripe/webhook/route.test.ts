@@ -11,10 +11,18 @@ vi.mock("@/src/lib/stripe/stripe", () => ({
   },
   CURRENCY: "eur",
 }))
+vi.mock("@/src/lib/mail/refundUserMail", () => ({
+  sendRefundUserMail: vi.fn(),
+}))
+vi.mock("@/src/lib/mail/incidentAdminMail", () => ({
+  sendIncidentAdminMail: vi.fn(),
+}))
 
 import { POST } from "./route"
 import { verifyWebhookSignature } from "@/src/lib/stripe/webhook-handler"
 import { stripe } from "@/src/lib/stripe/stripe"
+import { sendRefundUserMail } from "@/src/lib/mail/refundUserMail"
+import { sendIncidentAdminMail } from "@/src/lib/mail/incidentAdminMail"
 import { prisma } from "@/src/lib/prisma"
 import {
   createUser,
@@ -25,6 +33,8 @@ import {
 
 const mockedVerify = vi.mocked(verifyWebhookSignature)
 const mockedRefund = vi.mocked(stripe.refunds.create)
+const mockedUserMail = vi.mocked(sendRefundUserMail)
+const mockedAdminMail = vi.mocked(sendIncidentAdminMail)
 
 function makeCheckoutCompletedEvent(args: {
   sessionId: string
@@ -81,6 +91,10 @@ function makeRequest(body = "{}") {
 beforeEach(() => {
   mockedVerify.mockReset()
   mockedRefund.mockReset()
+  mockedUserMail.mockReset()
+  mockedUserMail.mockResolvedValue({ ok: true, id: "msg_user" })
+  mockedAdminMail.mockReset()
+  mockedAdminMail.mockResolvedValue({ ok: true, id: "msg_admin" })
 })
 
 describe("POST /api/stripe/webhook", () => {
@@ -168,10 +182,10 @@ describe("POST /api/stripe/webhook", () => {
     expect(invoices[0].status).toBe("PAID")
   })
 
-  it("pre-checkout race: artwork already owned by another user → REFUNDED + Stripe refund", async () => {
+  it("pre-checkout race: artwork already owned by another user → REFUNDED + Stripe refund + emails", async () => {
     const otherBuyer = await createUser()
-    const lateBuyer = await createUser()
-    const artwork = await createArtwork({ price: 100, ownerId: otherBuyer.id })
+    const lateBuyer = await createUser({ email: "late@test.local" })
+    const artwork = await createArtwork({ title: "Crépuscule", price: 100, ownerId: otherBuyer.id })
     const sessionId = "cs_test_race_full"
 
     mockedVerify.mockResolvedValue(
@@ -201,6 +215,32 @@ describe("POST /api/stripe/webhook", () => {
       payment_intent: "pi_test_full_refund",
       amount: 10000,
     })
+
+    expect(mockedUserMail).toHaveBeenCalledOnce()
+    expect(mockedUserMail).toHaveBeenCalledWith({
+      to: "late@test.local",
+      refundedItems: [{ title: "Crépuscule", amountEur: 100 }],
+      totalRefundEur: 100,
+      sessionId,
+    })
+
+    expect(mockedAdminMail).toHaveBeenCalledOnce()
+    expect(mockedAdminMail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId,
+        userId: lateBuyer.id,
+        userEmail: "late@test.local",
+        refundOutcome: "issued",
+        refundError: undefined,
+        affectedItems: [
+          expect.objectContaining({
+            artworkId: artwork.id,
+            title: "Crépuscule",
+            amountEur: 100,
+          }),
+        ],
+      })
+    )
   })
 
   it("partial race: 1 available + 1 already taken → PAID + REFUNDED + partial Stripe refund", async () => {
@@ -410,10 +450,10 @@ describe("POST /api/stripe/webhook", () => {
     expect(mockedRefund).not.toHaveBeenCalled()
   })
 
-  it("if Stripe refund fails, invoices stay REFUNDED and the request still returns 200", async () => {
-    const buyer = await createUser()
+  it("if Stripe refund fails: invoices stay REFUNDED, no user mail, admin mail with URGENT flag", async () => {
+    const buyer = await createUser({ email: "buyer@test.local" })
     const owner = await createUser()
-    const taken = await createArtwork({ price: 100, ownerId: owner.id })
+    const taken = await createArtwork({ title: "Aurore", price: 100, ownerId: owner.id })
     const sessionId = "cs_test_refund_fail"
 
     mockedVerify.mockResolvedValue(
@@ -432,5 +472,36 @@ describe("POST /api/stripe/webhook", () => {
     const invoice = await prisma.invoice.findFirst({ where: { stripeSessionId: sessionId } })
     expect(invoice?.status).toBe("REFUNDED")
     expect(mockedRefund).toHaveBeenCalledOnce()
+
+    expect(mockedUserMail).not.toHaveBeenCalled()
+
+    expect(mockedAdminMail).toHaveBeenCalledOnce()
+    expect(mockedAdminMail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId,
+        refundOutcome: "failed",
+        refundError: "Stripe API down",
+      })
+    )
+  })
+
+  it("happy path does NOT send any email", async () => {
+    const buyer = await createUser({ email: "happy@test.local" })
+    const artwork = await createArtwork({ price: 80 })
+    await createBasketWithItem({ userId: buyer.id, artworkId: artwork.id })
+    const sessionId = "cs_test_no_email"
+
+    mockedVerify.mockResolvedValue(
+      makeCheckoutCompletedEvent({
+        sessionId,
+        userId: buyer.id,
+        artworkIds: [artwork.id],
+      })
+    )
+
+    await POST(makeRequest())
+
+    expect(mockedUserMail).not.toHaveBeenCalled()
+    expect(mockedAdminMail).not.toHaveBeenCalled()
   })
 })
