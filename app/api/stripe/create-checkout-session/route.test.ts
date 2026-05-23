@@ -93,6 +93,7 @@ describe("POST /api/stripe/create-checkout-session", () => {
     const callArg = mockedCreateSession.mock.calls[0]![0] as Stripe.Checkout.SessionCreateParams
     expect(callArg.mode).toBe("payment")
     expect(callArg.customer_email).toBe("buyer@test.local")
+    expect(callArg.payment_intent_data?.receipt_email).toBe("buyer@test.local")
     expect(callArg.line_items).toHaveLength(2)
     const amounts = callArg.line_items!.map((li) => li.price_data!.unit_amount)
     expect(amounts).toContain(10000)

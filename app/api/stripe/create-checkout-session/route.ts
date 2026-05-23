@@ -54,6 +54,9 @@ export async function POST() {
       success_url: `${appUrl}/profile/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl}/profile/checkout/cancel`,
       customer_email: session.user.email || undefined,
+      payment_intent_data: {
+        receipt_email: session.user.email || undefined,
+      },
       metadata: {
         userId,
         artworkIds: basket.items.map(item => item.artworkId).join(",")
