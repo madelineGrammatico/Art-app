@@ -50,6 +50,18 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ received: true })
       }
 
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { email: true },
+      })
+      if (!user) {
+        console.error("[webhook] buyer not found in DB", {
+          sessionId: session.id,
+          userId,
+        })
+        return NextResponse.json({ received: true })
+      }
+
       const failures: RefundFailure[] = []
 
       try {
@@ -100,47 +112,51 @@ export async function POST(request: NextRequest) {
         throw err
       }
 
-      if (failures.length > 0 && paymentIntentId) {
+      if (failures.length > 0) {
         const totalRefundCents = failures.reduce((sum, f) => sum + f.amountCents, 0)
-
-        let refundOutcome: "issued" | "failed" = "issued"
-        let refundErrorMessage: string | undefined
-
-        try {
-          await stripe.refunds.create({
-            payment_intent: paymentIntentId,
-            amount: totalRefundCents,
-          })
-          console.warn("[webhook] partial refund issued", {
-            sessionId: session.id,
-            userId,
-            failures,
-            totalRefundCents,
-          })
-        } catch (refundErr) {
-          refundOutcome = "failed"
-          refundErrorMessage =
-            refundErr instanceof Error ? refundErr.message : String(refundErr)
-          console.error("[webhook] Stripe refund failed", {
-            sessionId: session.id,
-            userId,
-            failures,
-            error: refundErrorMessage,
-          })
-        }
-
-        const user = await prisma.user.findUnique({
-          where: { id: userId },
-          select: { email: true },
-        })
-
         const affectedItems = failures.map((f) => ({
           artworkId: f.artworkId,
           title: f.artworkTitle,
           amountEur: f.amountCents / 100,
         }))
 
-        if (refundOutcome === "issued" && user?.email) {
+        let refundOutcome: "issued" | "failed" = "issued"
+        let refundErrorMessage: string | undefined
+
+        if (paymentIntentId) {
+          try {
+            await stripe.refunds.create({
+              payment_intent: paymentIntentId,
+              amount: totalRefundCents,
+            })
+            console.warn("[webhook] partial refund issued", {
+              sessionId: session.id,
+              userId,
+              failures,
+              totalRefundCents,
+            })
+          } catch (refundErr) {
+            refundOutcome = "failed"
+            refundErrorMessage =
+              refundErr instanceof Error ? refundErr.message : String(refundErr)
+            console.error("[webhook] Stripe refund failed", {
+              sessionId: session.id,
+              userId,
+              failures,
+              error: refundErrorMessage,
+            })
+          }
+        } else {
+          refundOutcome = "failed"
+          refundErrorMessage = "Stripe payment_intent missing on session"
+          console.error("[webhook] cannot refund: payment_intent missing", {
+            sessionId: session.id,
+            userId,
+            failures,
+          })
+        }
+
+        if (refundOutcome === "issued" && user.email) {
           try {
             const userMailRes = await sendRefundUserMail({
               to: user.email,
@@ -169,7 +185,7 @@ export async function POST(request: NextRequest) {
           const adminMailRes = await sendIncidentAdminMail({
             sessionId: session.id,
             userId,
-            userEmail: user?.email,
+            userEmail: user.email,
             affectedItems,
             refundOutcome,
             refundError: refundErrorMessage,

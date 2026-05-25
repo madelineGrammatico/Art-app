@@ -485,6 +485,64 @@ describe("POST /api/stripe/webhook", () => {
     )
   })
 
+  it("buyer not found in DB: returns 200 without writing invoices (defense in depth)", async () => {
+    const artwork = await createArtwork({ price: 100 })
+    const sessionId = "cs_test_no_user"
+
+    mockedVerify.mockResolvedValue(
+      makeCheckoutCompletedEvent({
+        sessionId,
+        userId: "ghost-user-id",
+        artworkIds: [artwork.id],
+        paymentIntentId: "pi_test_no_user",
+      })
+    )
+
+    const res = await POST(makeRequest())
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ received: true })
+    const invoices = await prisma.invoice.findMany({ where: { stripeSessionId: sessionId } })
+    expect(invoices).toHaveLength(0)
+    expect(mockedRefund).not.toHaveBeenCalled()
+    expect(mockedUserMail).not.toHaveBeenCalled()
+    expect(mockedAdminMail).not.toHaveBeenCalled()
+  })
+
+  it("race with NULL payment_intent: invoices REFUNDED in DB, NO refund call, admin alert URGENT", async () => {
+    const buyer = await createUser({ email: "buyer@test.local" })
+    const otherOwner = await createUser()
+    const taken = await createArtwork({ title: "Crépuscule", price: 100, ownerId: otherOwner.id })
+    const sessionId = "cs_test_null_pi"
+
+    mockedVerify.mockResolvedValue(
+      makeCheckoutCompletedEvent({
+        sessionId,
+        userId: buyer.id,
+        artworkIds: [taken.id],
+        paymentIntentId: null,
+      })
+    )
+
+    const res = await POST(makeRequest())
+
+    expect(res.status).toBe(200)
+    const invoice = await prisma.invoice.findFirst({ where: { stripeSessionId: sessionId } })
+    expect(invoice?.status).toBe("REFUNDED")
+
+    expect(mockedRefund).not.toHaveBeenCalled()
+    expect(mockedUserMail).not.toHaveBeenCalled()
+
+    expect(mockedAdminMail).toHaveBeenCalledOnce()
+    expect(mockedAdminMail).toHaveBeenCalledWith(
+      expect.objectContaining({
+        sessionId,
+        refundOutcome: "failed",
+        refundError: "Stripe payment_intent missing on session",
+      })
+    )
+  })
+
   it("happy path does NOT send any email", async () => {
     const buyer = await createUser({ email: "happy@test.local" })
     const artwork = await createArtwork({ price: 80 })
