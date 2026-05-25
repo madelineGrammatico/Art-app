@@ -52,6 +52,10 @@ model Invoice {
   status               InvoiceStatus
   stripeSessionId      String?
   stripePaymentIntentId String?
+  // For REFUNDED invoices: id of the Stripe refund. null means the refund
+  // has not been confirmed yet (used as a recovery marker if the webhook
+  // crashed between the DB transaction and the stripe.refunds.create call).
+  stripeRefundId       String?
 
   @@unique([stripeSessionId, artworkId])
   @@index([buyerId])

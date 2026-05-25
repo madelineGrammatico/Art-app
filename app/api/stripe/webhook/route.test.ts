@@ -211,10 +211,13 @@ describe("POST /api/stripe/webhook", () => {
     expect(stillOwnedByOther?.ownerId).toBe(otherBuyer.id)
 
     expect(mockedRefund).toHaveBeenCalledOnce()
-    expect(mockedRefund).toHaveBeenCalledWith({
-      payment_intent: "pi_test_full_refund",
-      amount: 10000,
-    })
+    expect(mockedRefund).toHaveBeenCalledWith(
+      {
+        payment_intent: "pi_test_full_refund",
+        amount: 10000,
+      },
+      { idempotencyKey: `refund-${sessionId}` }
+    )
 
     expect(mockedUserMail).toHaveBeenCalledOnce()
     expect(mockedUserMail).toHaveBeenCalledWith({
@@ -285,10 +288,13 @@ describe("POST /api/stripe/webhook", () => {
     expect(availableAfter?.ownerId).toBe(buyer.id)
     expect(takenAfter?.ownerId).toBe(otherOwner.id)
 
-    expect(mockedRefund).toHaveBeenCalledWith({
-      payment_intent: "pi_test_partial",
-      amount: 25000,
-    })
+    expect(mockedRefund).toHaveBeenCalledWith(
+      {
+        payment_intent: "pi_test_partial",
+        amount: 25000,
+      },
+      { idempotencyKey: `refund-${sessionId}` }
+    )
   })
 
   it("on checkout.session.completed without metadata: logs and returns 200 (no DB writes)", async () => {
@@ -541,6 +547,110 @@ describe("POST /api/stripe/webhook", () => {
         refundError: "Stripe payment_intent missing on session",
       })
     )
+  })
+
+  it("after successful refund: REFUNDED invoices are stamped with stripeRefundId", async () => {
+    const buyer = await createUser({ email: "stamp@test.local" })
+    const owner = await createUser()
+    const taken = await createArtwork({ price: 100, ownerId: owner.id })
+    const sessionId = "cs_test_stamp"
+
+    mockedVerify.mockResolvedValue(
+      makeCheckoutCompletedEvent({
+        sessionId,
+        userId: buyer.id,
+        artworkIds: [taken.id],
+        paymentIntentId: "pi_test_stamp",
+      })
+    )
+    mockedRefund.mockResolvedValue({ id: "re_test_stamp" } as never)
+
+    await POST(makeRequest())
+
+    const invoice = await prisma.invoice.findFirst({ where: { stripeSessionId: sessionId } })
+    expect(invoice?.status).toBe("REFUNDED")
+    expect(invoice?.stripeRefundId).toBe("re_test_stamp")
+  })
+
+  it("recovery: REFUNDED invoices with null stripeRefundId trigger refund retry on webhook replay", async () => {
+    const buyer = await createUser({ email: "recover@test.local" })
+    const owner = await createUser()
+    const taken = await createArtwork({ title: "Aube", price: 100, ownerId: owner.id })
+    const sessionId = "cs_test_recovery"
+
+    // Simulate a previous crash: REFUNDED invoice exists in DB but
+    // stripeRefundId is null (refund never confirmed).
+    await prisma.invoice.create({
+      data: {
+        buyerId: buyer.id,
+        artworkId: taken.id,
+        amount: 100,
+        status: "REFUNDED",
+        stripeSessionId: sessionId,
+        stripePaymentIntentId: "pi_test_recovery",
+        stripeRefundId: null,
+      },
+    })
+
+    mockedVerify.mockResolvedValue(
+      makeCheckoutCompletedEvent({
+        sessionId,
+        userId: buyer.id,
+        artworkIds: [taken.id],
+        paymentIntentId: "pi_test_recovery",
+      })
+    )
+    mockedRefund.mockResolvedValue({ id: "re_recovered" } as never)
+
+    const res = await POST(makeRequest())
+
+    expect(res.status).toBe(200)
+    expect(mockedRefund).toHaveBeenCalledOnce()
+    expect(mockedRefund).toHaveBeenCalledWith(
+      { payment_intent: "pi_test_recovery", amount: 10000 },
+      { idempotencyKey: `refund-${sessionId}` }
+    )
+
+    const invoice = await prisma.invoice.findFirst({ where: { stripeSessionId: sessionId } })
+    expect(invoice?.stripeRefundId).toBe("re_recovered")
+
+    expect(mockedUserMail).toHaveBeenCalledOnce()
+    expect(mockedAdminMail).toHaveBeenCalledOnce()
+  })
+
+  it("fully processed (REFUNDED + stripeRefundId set): webhook replay does nothing", async () => {
+    const buyer = await createUser()
+    const owner = await createUser()
+    const taken = await createArtwork({ price: 100, ownerId: owner.id })
+    const sessionId = "cs_test_already_settled"
+
+    await prisma.invoice.create({
+      data: {
+        buyerId: buyer.id,
+        artworkId: taken.id,
+        amount: 100,
+        status: "REFUNDED",
+        stripeSessionId: sessionId,
+        stripePaymentIntentId: "pi_test_settled",
+        stripeRefundId: "re_settled",
+      },
+    })
+
+    mockedVerify.mockResolvedValue(
+      makeCheckoutCompletedEvent({
+        sessionId,
+        userId: buyer.id,
+        artworkIds: [taken.id],
+        paymentIntentId: "pi_test_settled",
+      })
+    )
+
+    const res = await POST(makeRequest())
+
+    expect(res.status).toBe(200)
+    expect(mockedRefund).not.toHaveBeenCalled()
+    expect(mockedUserMail).not.toHaveBeenCalled()
+    expect(mockedAdminMail).not.toHaveBeenCalled()
   })
 
   it("happy path does NOT send any email", async () => {
