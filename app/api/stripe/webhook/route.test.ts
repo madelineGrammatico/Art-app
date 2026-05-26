@@ -614,8 +614,10 @@ describe("POST /api/stripe/webhook", () => {
     const invoice = await prisma.invoice.findFirst({ where: { stripeSessionId: sessionId } })
     expect(invoice?.stripeRefundId).toBe("re_recovered")
 
-    expect(mockedUserMail).toHaveBeenCalledOnce()
-    expect(mockedAdminMail).toHaveBeenCalledOnce()
+    // Recovery skips emails to avoid spam if they were already sent before the
+    // crash. Stripe's own refund receipt + recovery log are the fallback.
+    expect(mockedUserMail).not.toHaveBeenCalled()
+    expect(mockedAdminMail).not.toHaveBeenCalled()
   })
 
   it("fully processed (REFUNDED + stripeRefundId set): webhook replay does nothing", async () => {

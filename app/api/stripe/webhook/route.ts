@@ -14,16 +14,20 @@ type RefundFailure = {
 }
 
 // Handles the Stripe refund call + DB marker + user/admin notifications.
-// Idempotent: safe to call multiple times for the same session thanks to
-// Stripe's idempotency key (refund is deduplicated server-side).
+// Idempotent on the Stripe side (idempotency key dedupes refunds).
+// Set `isRecovery: true` when called from the crash-recovery path: emails are
+// skipped because we cannot tell if they were already sent before the crash,
+// and re-sending would spam. Stripe's own refund receipt still reaches the
+// buyer, and the recovery itself is logged for admin visibility.
 async function handleRefunds(args: {
   sessionId: string
   paymentIntentId: string | null
   userId: string
   userEmail: string | null
   failures: RefundFailure[]
+  isRecovery: boolean
 }) {
-  const { sessionId, paymentIntentId, userId, userEmail, failures } = args
+  const { sessionId, paymentIntentId, userId, userEmail, failures, isRecovery } = args
   if (failures.length === 0) return
 
   const totalRefundCents = failures.reduce((sum, f) => sum + f.amountCents, 0)
@@ -89,7 +93,7 @@ async function handleRefunds(args: {
     })
   }
 
-  if (refundOutcome === "issued" && userEmail) {
+  if (refundOutcome === "issued" && userEmail && !isRecovery) {
     try {
       const userMailRes = await sendRefundUserMail({
         to: userEmail,
@@ -114,26 +118,28 @@ async function handleRefunds(args: {
     }
   }
 
-  try {
-    const adminMailRes = await sendIncidentAdminMail({
-      sessionId,
-      userId,
-      userEmail,
-      affectedItems,
-      refundOutcome,
-      refundError: refundErrorMessage,
-    })
-    if (!adminMailRes.ok) {
-      console.error("[webhook] admin alert email failed", {
+  if (!isRecovery) {
+    try {
+      const adminMailRes = await sendIncidentAdminMail({
         sessionId,
-        error: adminMailRes.error,
+        userId,
+        userEmail,
+        affectedItems,
+        refundOutcome,
+        refundError: refundErrorMessage,
+      })
+      if (!adminMailRes.ok) {
+        console.error("[webhook] admin alert email failed", {
+          sessionId,
+          error: adminMailRes.error,
+        })
+      }
+    } catch (err) {
+      console.error("[webhook] admin alert email threw", {
+        sessionId,
+        error: err instanceof Error ? err.message : err,
       })
     }
-  } catch (err) {
-    console.error("[webhook] admin alert email threw", {
-      sessionId,
-      error: err instanceof Error ? err.message : err,
-    })
   }
 }
 
@@ -216,6 +222,7 @@ export async function POST(request: NextRequest) {
           userId,
           userEmail: user.email,
           failures: recoveryFailures,
+          isRecovery: true,
         })
 
         return NextResponse.json({ received: true })
@@ -277,6 +284,7 @@ export async function POST(request: NextRequest) {
         userId,
         userEmail: user.email,
         failures,
+        isRecovery: false,
       })
     } else if (event.type === "checkout.session.expired") {
       const session = event.data.object as Stripe.Checkout.Session
