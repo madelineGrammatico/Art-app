@@ -194,7 +194,12 @@ export async function POST(request: NextRequest) {
       //   dedupes via idempotency key).
       const existingInvoices = await prisma.invoice.findMany({
         where: { stripeSessionId: session.id },
-        include: { artwork: { select: { title: true } } },
+        select: {
+          artworkId: true,
+          amount: true,
+          status: true,
+          stripeRefundId: true,
+        },
       })
 
       if (existingInvoices.length > 0) {
@@ -210,9 +215,16 @@ export async function POST(request: NextRequest) {
           count: pendingRefunds.length,
         })
 
+        // Lazy fetch artwork titles (only needed on the rare recovery path).
+        const artworks = await prisma.artwork.findMany({
+          where: { id: { in: pendingRefunds.map((p) => p.artworkId) } },
+          select: { id: true, title: true },
+        })
+        const titleById = new Map(artworks.map((a) => [a.id, a.title]))
+
         const recoveryFailures: RefundFailure[] = pendingRefunds.map((inv) => ({
           artworkId: inv.artworkId,
-          artworkTitle: inv.artwork.title,
+          artworkTitle: titleById.get(inv.artworkId) ?? "(titre indisponible)",
           amountCents: Math.round(Number(inv.amount) * 100),
         }))
 

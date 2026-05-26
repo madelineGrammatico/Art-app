@@ -107,6 +107,25 @@ describe("POST /api/stripe/create-checkout-session", () => {
     expect(invoices).toHaveLength(0)
   })
 
+  it("returns 500 in production when no app URL is configured (NEXT_PUBLIC_APP_URL/VERCEL_URL)", async () => {
+    const buyer = await createUser()
+    const artwork = await createArtwork({ price: 100 })
+    await createBasketWithItems(buyer.id, [artwork.id])
+    mockedAuth.mockResolvedValue(sessionFor({ id: buyer.id }) as never)
+
+    vi.stubEnv("NEXT_PUBLIC_APP_URL", "")
+    vi.stubEnv("VERCEL_URL", "")
+    vi.stubEnv("NODE_ENV", "production")
+
+    try {
+      const res = await POST()
+      expect(res.status).toBe(500)
+      expect(mockedCreateSession).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
   it("returns 500 when Stripe rejects the session creation", async () => {
     const buyer = await createUser()
     const artwork = await createArtwork({ price: 100 })

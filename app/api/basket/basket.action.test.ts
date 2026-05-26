@@ -106,6 +106,17 @@ describe("addToBasketAction", () => {
     expect(res).toEqual({ error: "non authorisé" })
   })
 
+  it("rejects an ADMIN adding to someone else's basket (write actions are owner-only)", async () => {
+    const admin = await createUser({ role: "ADMIN" })
+    const target = await createUser()
+    const artwork = await createArtwork()
+    mockedAuth.mockResolvedValue(sessionFor({ id: admin.id, role: "ADMIN" }) as never)
+
+    const res = await addToBasketAction(target.id, artwork.id)
+
+    expect(res).toEqual({ error: "non authorisé" })
+  })
+
   it("refuses to add an artwork that already has an owner", async () => {
     const buyer = await createUser()
     const owner = await createUser()
@@ -156,6 +167,18 @@ describe("removeFromBasketAction", () => {
     expect(stillThere).not.toBeNull()
   })
 
+  it("rejects an ADMIN trying to clear another user's basket item", async () => {
+    const admin = await createUser({ role: "ADMIN" })
+    const target = await createUser()
+    const artwork = await createArtwork()
+    const basket = await createBasketWithItem({ userId: target.id, artworkId: artwork.id })
+    mockedAuth.mockResolvedValue(sessionFor({ id: admin.id, role: "ADMIN" }) as never)
+
+    const res = await removeFromBasketAction(admin.id, basket.items[0].id)
+
+    expect(res.error).toBe("non authorisé")
+  })
+
   it("removes the item when owned by the user", async () => {
     const user = await createUser()
     const artwork = await createArtwork()
@@ -179,6 +202,18 @@ describe("clearBasketAction", () => {
     mockedAuth.mockResolvedValue(sessionFor({ id: a.id }) as never)
 
     const res = await clearBasketAction(b.id)
+
+    expect(res).toEqual({ error: "non authorisé" })
+  })
+
+  it("rejects an ADMIN clearing another user's basket", async () => {
+    const admin = await createUser({ role: "ADMIN" })
+    const target = await createUser()
+    const artwork = await createArtwork()
+    await createBasketWithItem({ userId: target.id, artworkId: artwork.id })
+    mockedAuth.mockResolvedValue(sessionFor({ id: admin.id, role: "ADMIN" }) as never)
+
+    const res = await clearBasketAction(target.id)
 
     expect(res).toEqual({ error: "non authorisé" })
   })
@@ -210,6 +245,16 @@ describe("confirmBasketAction", () => {
     mockedAuth.mockResolvedValue(sessionFor({ id: a.id }) as never)
 
     const res = await confirmBasketAction(b.id)
+
+    expect(res).toEqual({ error: "non authorisé" })
+  })
+
+  it("rejects an ADMIN confirming another user's basket", async () => {
+    const admin = await createUser({ role: "ADMIN" })
+    const target = await createUser()
+    mockedAuth.mockResolvedValue(sessionFor({ id: admin.id, role: "ADMIN" }) as never)
+
+    const res = await confirmBasketAction(target.id)
 
     expect(res).toEqual({ error: "non authorisé" })
   })
