@@ -9,7 +9,7 @@ import {
   getUserIvoiceAction,
   getIvoiceAction,
   updateIvoiceAction,
-} from "./route"
+} from "./invoice.action"
 import { auth } from "@/src/lib/auth/auth"
 import { prisma } from "@/src/lib/prisma"
 import { createUser, createArtwork, createPendingInvoice } from "@/src/test/factories"

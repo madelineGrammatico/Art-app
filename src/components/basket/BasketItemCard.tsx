@@ -48,7 +48,7 @@ export default function BasketItemCard({ item }: BasketItemCardProps) {
       } else {
         router.refresh()
       }
-    } catch (err) {
+    } catch {
       setError("Une erreur est survenue")
     } finally {
       setIsRemoving(false)
@@ -68,7 +68,7 @@ export default function BasketItemCard({ item }: BasketItemCardProps) {
             </p>
             {item.artwork.ownerId !== null && (
               <p className="text-sm text-destructive mt-1">
-                ⚠️ Cette oeuvre n'est plus disponible
+                ⚠️ Cette oeuvre n&apos;est plus disponible
               </p>
             )}
           </div>

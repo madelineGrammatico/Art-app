@@ -47,7 +47,7 @@ export default function AddToBasketButton({
           router.refresh()
         }, 1000)
       }
-    } catch (err) {
+    } catch {
       setError("Une erreur est survenue")
     } finally {
       setIsLoading(false)

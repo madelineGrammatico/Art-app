@@ -46,7 +46,7 @@ export default async function page({params}: Pageprops) {
                             size="lg"
                         />
                     ) : (
-                        <p className='text-destructive'>Cette oeuvre n'est plus disponible</p>
+                        <p className='text-destructive'>Cette oeuvre n&apos;est plus disponible</p>
                     )}
                 </CardContent>
             </Card>

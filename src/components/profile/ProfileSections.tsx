@@ -23,7 +23,7 @@ export type SectionConfig = {
   description: string;
   requiresPassword: boolean;
   fields: SectionField[];
-  submitAction: (userId: string, values: Record<string, string>) => Promise<any>;
+  submitAction: (userId: string, values: Record<string, string>) => Promise<unknown>;
   getInitialValues: (user: ProfileUser) => Record<string, string | null>;
 };
 

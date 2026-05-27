@@ -21,6 +21,7 @@ const Page = () => {
   
     useEffect(()=> {
       if(isSubmit) update()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [isSubmit])
    
   return (
