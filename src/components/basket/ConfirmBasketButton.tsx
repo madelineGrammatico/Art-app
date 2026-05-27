@@ -28,7 +28,7 @@ export default function ConfirmBasketButton({ userId, disabled }: ConfirmBasketB
         router.refresh()
         router.push("/profile/checkout")
       }
-    } catch (err) {
+    } catch {
       setError("Une erreur est survenue")
     } finally {
       setIsLoading(false)

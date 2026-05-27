@@ -17,7 +17,7 @@ type ProfileFormProps = {
   userId: string;
   fields: Field[];
   initialValues: Record<string, string | null>;
-  submitAction: (userId: string, values: Record<string, string>) => Promise<any>;
+  submitAction: (userId: string, values: Record<string, string>) => Promise<unknown>;
   onSuccess?: () => void;
 };
 

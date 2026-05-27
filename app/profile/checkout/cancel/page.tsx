@@ -72,7 +72,7 @@ export default async function CheckoutCancelPage() {
             Paiement annulé
           </h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Votre paiement a été annulé. Aucun montant n'a été débité.
+            Votre paiement a été annulé. Aucun montant n&apos;a été débité.
           </p>
         </div>
         <Separator className="mb-4" />

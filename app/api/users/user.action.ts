@@ -1,9 +1,15 @@
 "use server"
 import { auth } from "@/src/lib/auth/auth"
 import { prisma } from "@/src/lib/prisma"
-import { User, PostalAddress } from "@prisma/client"
+import { User, Prisma } from "@prisma/client"
 import bcrypt from "bcryptjs"
 import { credentialPasswordShema } from "@/src/lib/shema"
+
+function isPrismaTableMissing(error: unknown): boolean {
+  if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2021") return true
+  if (error instanceof Error && (error.message.includes("does not exist") || error.message.includes("PostalAddress"))) return true
+  return false
+}
 
 export const getUserAction = async (id: string)=> {
     try {
@@ -225,9 +231,9 @@ export const getUserAddressesAction = async (userId: string) => {
         })
 
         return addresses
-    } catch (error: any) {
+    } catch (error) {
         // Si l'erreur est liée à une table inexistante, retourner un tableau vide
-        if (error?.code === 'P2021' || error?.message?.includes('does not exist') || error?.message?.includes('PostalAddress')) {
+        if (isPrismaTableMissing(error)) {
             console.warn("La table PostalAddress n'existe pas encore. Veuillez appliquer la migration.")
             return []
         }
@@ -265,9 +271,9 @@ export const createAddressAction = async (userId: string, addressData: AddressDa
                     where: { userId },
                     data: { isDefaultBilling: false }
                 })
-            } catch (error: any) {
+            } catch (error) {
                 // Ignorer l'erreur si la table n'existe pas encore
-                if (error?.code !== 'P2021' && !error?.message?.includes('does not exist')) {
+                if (!isPrismaTableMissing(error)) {
                     throw error
                 }
             }
@@ -279,9 +285,9 @@ export const createAddressAction = async (userId: string, addressData: AddressDa
                     where: { userId },
                     data: { isDefaultShipping: false }
                 })
-            } catch (error: any) {
+            } catch (error) {
                 // Ignorer l'erreur si la table n'existe pas encore
-                if (error?.code !== 'P2021' && !error?.message?.includes('does not exist')) {
+                if (!isPrismaTableMissing(error)) {
                     throw error
                 }
             }
@@ -300,9 +306,9 @@ export const createAddressAction = async (userId: string, addressData: AddressDa
         })
 
         return address
-    } catch (error: any) {
+    } catch (error) {
         // Si l'erreur est liée à une table inexistante, donner un message plus clair
-        if (error?.code === 'P2021' || error?.message?.includes('does not exist') || error?.message?.includes('PostalAddress')) {
+        if (isPrismaTableMissing(error)) {
             throw new Error("La table PostalAddress n'existe pas encore. Veuillez appliquer la migration Prisma avec 'npx prisma migrate deploy' ou 'npx prisma migrate dev'.")
         }
         console.error(error)
@@ -370,9 +376,9 @@ export const updateAddressAction = async (
         })
 
         return updatedAddress
-    } catch (error: any) {
+    } catch (error) {
         // Si l'erreur est liée à une table inexistante, donner un message plus clair
-        if (error?.code === 'P2021' || error?.message?.includes('does not exist') || error?.message?.includes('PostalAddress')) {
+        if (isPrismaTableMissing(error)) {
             throw new Error("La table PostalAddress n'existe pas encore. Veuillez appliquer la migration Prisma avec 'npx prisma migrate deploy' ou 'npx prisma migrate dev'.")
         }
         console.error(error)
@@ -407,9 +413,9 @@ export const deleteAddressAction = async (userId: string, addressId: string) => 
         })
 
         return { success: true }
-    } catch (error: any) {
+    } catch (error) {
         // Si l'erreur est liée à une table inexistante, donner un message plus clair
-        if (error?.code === 'P2021' || error?.message?.includes('does not exist') || error?.message?.includes('PostalAddress')) {
+        if (isPrismaTableMissing(error)) {
             throw new Error("La table PostalAddress n'existe pas encore. Veuillez appliquer la migration Prisma avec 'npx prisma migrate deploy' ou 'npx prisma migrate dev'.")
         }
         console.error(error)
