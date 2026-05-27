@@ -8,6 +8,8 @@ import { Separator } from "@/src/components/ui/separator"
 import Link from 'next/link'
 import { Button } from '@/src/components/ui/button'
 import { prisma } from '@/src/lib/prisma'
+import PurchasedItemsPanel from '@/src/components/checkout/PurchasedItemsPanel'
+import SuccessPaymentPolling from '@/src/components/checkout/SuccessPaymentPolling'
 
 type PageProps = {
   searchParams: Promise<{ session_id?: string }>
@@ -24,14 +26,14 @@ export default async function CheckoutSuccessPage({ searchParams }: PageProps) {
   const params = await searchParams
   const sessionId = params.session_id
 
-  // Récupérer les invoices payées récemment (dernières 5 minutes)
-  const recentPaidInvoices = await prisma.invoice.findMany({
+  // Récupérer les invoices traitées récemment (PAID ou REFUNDED, dernières 5 minutes)
+  const recentInvoices = await prisma.invoice.findMany({
     where: {
       buyerId: userId,
-      status: "PAID",
+      status: { in: ["PAID", "REFUNDED"] },
       ...(sessionId ? { stripeSessionId: sessionId } : {}),
       createdAt: {
-        gte: new Date(Date.now() - 5 * 60 * 1000) // Dernières 5 minutes
+        gte: new Date(Date.now() - 5 * 60 * 1000)
       }
     },
     include: {
@@ -42,17 +44,43 @@ export default async function CheckoutSuccessPage({ searchParams }: PageProps) {
     }
   })
 
-  // Convertir les Decimal en nombres
-  const invoicesWithNumberPrice = recentPaidInvoices.map(invoice => ({
-    ...invoice,
+  const invoicesWithNumberPrice = recentInvoices.map(invoice => ({
+    id: invoice.id,
     amount: Number(invoice.amount),
+    status: invoice.status as "PAID" | "REFUNDED",
     artwork: {
-      ...invoice.artwork,
-      price: Number(invoice.artwork.price)
-    }
+      id: invoice.artwork.id,
+      title: invoice.artwork.title,
+      price: Number(invoice.artwork.price),
+    },
   }))
 
-  const total = invoicesWithNumberPrice.reduce((sum, inv) => sum + inv.amount, 0)
+  const hasAnyInvoice = invoicesWithNumberPrice.length > 0
+  const allPaid = hasAnyInvoice && invoicesWithNumberPrice.every(i => i.status === "PAID")
+  const allRefunded = hasAnyInvoice && invoicesWithNumberPrice.every(i => i.status === "REFUNDED")
+  const mixed = hasAnyInvoice && !allPaid && !allRefunded
+
+  const headerTitle = allPaid
+    ? "✓ Paiement réussi"
+    : allRefunded
+    ? "Commande non honorée"
+    : mixed
+    ? "Commande partiellement honorée"
+    : "Confirmation de votre commande"
+
+  const headerSubtitle = allPaid
+    ? "Votre commande a été confirmée avec succès."
+    : allRefunded
+    ? "Aucune oeuvre n'a pu être livrée — paiement intégralement remboursé."
+    : mixed
+    ? "Une partie de votre commande n'a pas pu être livrée."
+    : "Traitement de votre paiement en cours."
+
+  const headerColorClass = allPaid
+    ? "text-green-600"
+    : allRefunded || mixed
+    ? "text-amber-700"
+    : ""
 
   return (
     <main className="w-full flex-1 mx-auto max-w-5xl px-4 py-8 flex flex-col gap-8 md:flex-row">
@@ -106,62 +134,23 @@ export default async function CheckoutSuccessPage({ searchParams }: PageProps) {
       {/* Colonne droite : confirmation de paiement */}
       <section className="w-full md:flex-1">
         <div className="mb-4">
-          <h2 className="text-2xl font-bold tracking-tight text-green-600">
-            ✓ Paiement réussi
+          <h2 className={`text-2xl font-bold tracking-tight ${headerColorClass}`}>
+            {headerTitle}
           </h2>
           <p className="text-sm text-muted-foreground mt-1">
-            Votre commande a été confirmée avec succès.
+            {headerSubtitle}
           </p>
         </div>
         <Separator className="mb-4" />
 
         {invoicesWithNumberPrice.length > 0 ? (
-          <div className="flex flex-col gap-4">
-            <Card className="p-6 bg-green-50 border-green-200">
-              <p className="text-green-800 font-semibold mb-2">
-                Merci pour votre achat !
-              </p>
-              <p className="text-sm text-green-700">
-                Vous avez acheté {invoicesWithNumberPrice.length} oeuvre{invoicesWithNumberPrice.length > 1 ? 's' : ''} pour un total de {total.toFixed(2)} €.
-              </p>
-            </Card>
-
-            <div className="flex flex-col gap-4">
-              <h3 className="text-lg font-semibold">Oeuvres achetées :</h3>
-              {invoicesWithNumberPrice.map((invoice) => (
-                <Card key={invoice.id} className="p-4">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h4 className="font-semibold">{invoice.artwork.title}</h4>
-                      <p className="text-sm text-muted-foreground">
-                        Prix : {invoice.amount.toFixed(2)} €
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-semibold">{invoice.amount.toFixed(2)} €</p>
-                    </div>
-                  </div>
-                </Card>
-              ))}
-            </div>
-
-            <div className="flex gap-2">
-              <Link href="/profile" className="flex-1">
-                <Button variant="outline" className="w-full">
-                  Retour au profil
-                </Button>
-              </Link>
-              <Link href="/" className="flex-1">
-                <Button className="w-full">
-                  Continuer vos achats
-                </Button>
-              </Link>
-            </div>
-          </div>
+          <PurchasedItemsPanel invoices={invoicesWithNumberPrice} />
+        ) : sessionId ? (
+          <SuccessPaymentPolling sessionId={sessionId} />
         ) : (
           <Card className="p-8 text-center">
             <p className="text-muted-foreground mb-4">
-              Aucune commande récente trouvée. Le paiement peut prendre quelques instants à être traité.
+              Aucune commande récente trouvée.
             </p>
             <Link href="/profile">
               <Button variant="outline">Retour au profil</Button>

@@ -38,6 +38,7 @@ enum InvoiceStatus {
   PENDING
   PAID
   CANCELLED
+  REFUNDED
 }
 
 model Invoice {
@@ -47,11 +48,16 @@ model Invoice {
   buyerId              String
   buyer                User          @relation(fields: [buyerId], references: [id], onDelete: Restrict)
   createdAt            DateTime      @default(now())
-  amount               Decimal      
+  amount               Decimal
   status               InvoiceStatus
-  stripeSessionId      String?       @unique
-  stripePaymentIntentId String?      @unique
+  stripeSessionId      String?
+  stripePaymentIntentId String?
+  // For REFUNDED invoices: id of the Stripe refund. null means the refund
+  // has not been confirmed yet (used as a recovery marker if the webhook
+  // crashed between the DB transaction and the stripe.refunds.create call).
+  stripeRefundId       String?
 
+  @@unique([stripeSessionId, artworkId])
   @@index([buyerId])
   @@index([artworkId])
   @@index([stripeSessionId])

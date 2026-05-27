@@ -85,15 +85,15 @@ export const getBasketAction = async (userId: string) => {
 }
 
 export const addToBasketAction = async (
-  userId: string, 
+  userId: string,
   artworkId: string
 ) => {
   try {
     const session = await auth()
     if (!session || !session.user) throw new Error("non authorisé")
-    
-    // Vérifier les permissions
-    if (session.user.role !== "ADMIN" && session.user.id !== userId) {
+
+    // Write actions on a basket are owner-only (no ADMIN bypass).
+    if (session.user.id !== userId) {
       throw new Error("non authorisé")
     }
 
@@ -158,15 +158,15 @@ export const addToBasketAction = async (
 }
 
 export const removeFromBasketAction = async (
-  userId: string, 
+  userId: string,
   basketItemId: string
 ) => {
   try {
     const session = await auth()
     if (!session || !session.user) throw new Error("non authorisé")
-    
-    // Vérifier les permissions
-    if (session.user.role !== "ADMIN" && session.user.id !== userId) {
+
+    // Write actions on a basket are owner-only (no ADMIN bypass).
+    if (session.user.id !== userId) {
       throw new Error("non authorisé")
     }
 
@@ -195,9 +195,9 @@ export const clearBasketAction = async (userId: string) => {
   try {
     const session = await auth()
     if (!session || !session.user) throw new Error("non authorisé")
-    
-    // Vérifier les permissions
-    if (session.user.role !== "ADMIN" && session.user.id !== userId) {
+
+    // Write actions on a basket are owner-only (no ADMIN bypass).
+    if (session.user.id !== userId) {
       throw new Error("non authorisé")
     }
 
@@ -222,20 +222,17 @@ export const confirmBasketAction = async (userId: string) => {
   try {
     const session = await auth()
     if (!session || !session.user) throw new Error("non authorisé")
-    
-    // Vérifier les permissions
-    if (session.user.role !== "ADMIN" && session.user.id !== userId) {
+
+    // Write actions on a basket are owner-only (no ADMIN bypass).
+    if (session.user.id !== userId) {
       throw new Error("non authorisé")
     }
 
-    // Récupérer le panier avec les items et artworks
     const basket = await prisma.basket.findUnique({
       where: { userId },
       include: {
         items: {
-          include: {
-            artwork: true
-          }
+          include: { artwork: true }
         }
       }
     })
@@ -243,33 +240,12 @@ export const confirmBasketAction = async (userId: string) => {
     if (!basket) throw new Error("Panier non trouvé")
     if (basket.items.length === 0) throw new Error("Votre panier est vide")
 
-    // Vérifier que tous les artworks sont encore disponibles
     const unavailableArtworks = basket.items.filter(item => item.artwork.ownerId !== null)
     if (unavailableArtworks.length > 0) {
       throw new Error(`${unavailableArtworks.length} oeuvre${unavailableArtworks.length > 1 ? 's' : ''} n'est plus disponible`)
     }
 
-    // Créer une invoice pour chaque artwork du panier
-    const invoices = await Promise.all(
-      basket.items.map(item =>
-        prisma.invoice.create({
-          data: {
-            artworkId: item.artworkId,
-            buyerId: userId,
-            amount: item.artwork.price,
-            status: "PENDING"
-          }
-        })
-      )
-    )
-
-    // Ne pas vider le panier immédiatement - sera vidé après paiement réussi via webhook
-
-    return { 
-      success: true, 
-      invoicesCount: invoices.length,
-      invoiceIds: invoices.map(inv => inv.id)
-    }
+    return { success: true, itemsCount: basket.items.length }
   } catch (error) {
     console.error(error)
     return { error: error instanceof Error ? error.message : "Erreur lors de la confirmation du panier" }

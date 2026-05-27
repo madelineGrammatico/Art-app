@@ -1,34 +1,31 @@
-import { NextRequest, NextResponse } from "next/server"
+import { NextResponse } from "next/server"
 import { auth } from "@/src/lib/auth/auth"
 import { prisma } from "@/src/lib/prisma"
 import { stripe, CURRENCY } from "@/src/lib/stripe/stripe"
 
-export async function POST(request: NextRequest) {
+export async function POST() {
   try {
     const session = await auth()
-    if (!session || !session.user) {
+    if (!session || !session.user || !session.user.id) {
       return NextResponse.json({ error: "Non autorisé" }, { status: 401 })
     }
 
     const userId = session.user.id
 
-    // Récupérer toutes les invoices PENDING de l'utilisateur
-    const invoices = await prisma.invoice.findMany({
-      where: {
-        buyerId: userId,
-        status: "PENDING"
-      },
+    const basket = await prisma.basket.findUnique({
+      where: { userId },
       include: {
-        artwork: true
+        items: {
+          include: { artwork: true }
+        }
       }
     })
 
-    if (invoices.length === 0) {
+    if (!basket || basket.items.length === 0) {
       return NextResponse.json({ error: "Aucune commande en attente" }, { status: 400 })
     }
 
-    // Vérifier que tous les artworks sont encore disponibles
-    const unavailableArtworks = invoices.filter(inv => inv.artwork.ownerId !== null)
+    const unavailableArtworks = basket.items.filter(item => item.artwork.ownerId !== null)
     if (unavailableArtworks.length > 0) {
       return NextResponse.json(
         { error: `${unavailableArtworks.length} oeuvre${unavailableArtworks.length > 1 ? 's' : ''} n'est plus disponible` },
@@ -36,49 +33,44 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || 
-      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000")
+    const configuredAppUrl =
+      process.env.NEXT_PUBLIC_APP_URL ||
+      (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : null)
+    if (!configuredAppUrl && process.env.NODE_ENV === "production") {
+      throw new Error(
+        "App URL is not configured: NEXT_PUBLIC_APP_URL or VERCEL_URL must be set in production"
+      )
+    }
+    const appUrl = configuredAppUrl ?? "http://localhost:3000"
 
-    // Créer les line items pour Stripe Checkout
-    const lineItems = invoices.map(invoice => ({
+    const lineItems = basket.items.map(item => ({
       price_data: {
         currency: CURRENCY,
         product_data: {
-          name: invoice.artwork.title,
-          description: `Oeuvre d'art - ${invoice.artwork.title}`
+          name: item.artwork.title,
+          description: `Oeuvre d'art - ${item.artwork.title}`
         },
-        unit_amount: Math.round(Number(invoice.amount) * 100) // Convertir en centimes
+        unit_amount: Math.round(Number(item.artwork.price) * 100)
       },
       quantity: 1
     }))
 
-    // Calculer le total
-    const totalAmount = invoices.reduce((sum, inv) => sum + Number(inv.amount), 0)
-
-    // Créer la session Stripe Checkout
     const checkoutSession = await stripe.checkout.sessions.create({
       mode: "payment",
       line_items: lineItems,
       success_url: `${appUrl}/profile/checkout/success?session_id={CHECKOUT_SESSION_ID}`,
       cancel_url: `${appUrl}/profile/checkout/cancel`,
       customer_email: session.user.email || undefined,
-      metadata: {
-        userId: userId,
-        invoiceIds: invoices.map(inv => inv.id).join(",")
-      }
-    })
-
-    // Mettre à jour les invoices avec le stripeSessionId
-    await prisma.invoice.updateMany({
-      where: {
-        id: { in: invoices.map(inv => inv.id) }
+      payment_intent_data: {
+        receipt_email: session.user.email || undefined,
       },
-      data: {
-        stripeSessionId: checkoutSession.id
+      metadata: {
+        userId,
+        artworkIds: basket.items.map(item => item.artworkId).join(",")
       }
     })
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       url: checkoutSession.url,
       sessionId: checkoutSession.id
     })
