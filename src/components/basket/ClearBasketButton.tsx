@@ -30,7 +30,7 @@ export default function ClearBasketButton({ userId }: ClearBasketButtonProps) {
       } else {
         router.refresh()
       }
-    } catch (err) {
+    } catch {
       setError("Une erreur est survenue")
     } finally {
       setIsLoading(false)

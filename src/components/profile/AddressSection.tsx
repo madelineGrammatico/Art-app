@@ -192,7 +192,7 @@ export default function AddressSection({
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="flex items-center justify-between mb-4">
                   <h4 className="text-base font-semibold text-slate-900">
-                    Modifier l'adresse
+                    Modifier l&apos;adresse
                   </h4>
                   <Button
                     type="button"
@@ -557,7 +557,7 @@ export default function AddressSection({
                 </Button>
                 <Button type="submit" className="bg-black text-white hover:bg-slate-800">
                   <Check className="w-4 h-4 mr-2" />
-                  Ajouter l'adresse
+                  Ajouter l&apos;adresse
                 </Button>
               </div>
             </form>
