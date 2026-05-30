@@ -48,3 +48,27 @@ export async function createBasketWithItem(args: { userId: string; artworkId: st
     include: { items: true },
   })
 }
+
+export async function createAddress(
+  args: {
+    userId: string
+    street?: string
+    postalCode?: string
+    city?: string
+    country?: string
+    isDefaultBilling?: boolean
+    isDefaultShipping?: boolean
+  }
+) {
+  return prisma.postalAddress.create({
+    data: {
+      userId: args.userId,
+      street: args.street ?? "1 rue de Test",
+      postalCode: args.postalCode ?? "75001",
+      city: args.city ?? "Paris",
+      country: args.country ?? "France",
+      isDefaultBilling: args.isDefaultBilling ?? false,
+      isDefaultShipping: args.isDefaultShipping ?? false,
+    },
+  })
+}
