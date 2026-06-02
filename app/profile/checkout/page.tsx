@@ -133,7 +133,7 @@ export default async function CheckoutPage() {
             </Card>
           ))}
 
-          <CheckoutPanel addresses={addresses} total={total} />
+          <CheckoutPanel userId={userId} addresses={addresses} total={total} />
         </div>
       </section>
     </main>

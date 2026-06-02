@@ -5,31 +5,16 @@ import { useRouter } from "next/navigation";
 import { useSession } from "next-auth/react";
 import { Card, CardContent } from "../ui/card";
 import { Button } from "../ui/button";
-import { Input } from "../ui/input";
-import { Label } from "../ui/label";
 import {
-  createAddressAction,
-  updateAddressAction,
   deleteAddressAction,
   getUserAddressesAction,
 } from "@/app/api/users/user.action";
-import { MapPin, Plus, Edit2, Trash2, Check, X, Building2, Truck } from "lucide-react";
-type PostalAddress = {
-  id: string;
-  userId: string;
-  street: string;
-  postalCode: string;
-  city: string;
-  country: string;
-  isDefaultBilling: boolean;
-  isDefaultShipping: boolean;
-  createdAt: Date;
-  updatedAt: Date;
-};
+import { MapPin, Plus, Edit2, Trash2, X, Building2, Truck } from "lucide-react";
+import AddressForm, { SavedAddress } from "../address/AddressForm";
 
 type AddressSectionProps = {
   userId: string;
-  initialAddresses: PostalAddress[];
+  initialAddresses: SavedAddress[];
 };
 
 export default function AddressSection({
@@ -38,90 +23,32 @@ export default function AddressSection({
 }: AddressSectionProps) {
   const { update } = useSession();
   const router = useRouter();
-  const [addresses, setAddresses] = useState<PostalAddress[]>(initialAddresses);
+  const [addresses, setAddresses] = useState<SavedAddress[]>(initialAddresses);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [isAdding, setIsAdding] = useState(false);
   const [error, setError] = useState("");
   const [isDeleting, setIsDeleting] = useState<string | null>(null);
 
-  const [formData, setFormData] = useState({
-    street: "",
-    postalCode: "",
-    city: "",
-    country: "",
-    isDefaultBilling: false,
-    isDefaultShipping: false,
-  });
-
-  const resetForm = () => {
-    setFormData({
-      street: "",
-      postalCode: "",
-      city: "",
-      country: "",
-      isDefaultBilling: false,
-      isDefaultShipping: false,
-    });
-    setError("");
+  const refreshAfterChange = async () => {
+    const updated = await getUserAddressesAction(userId);
+    setAddresses(updated);
+    update();
+    router.refresh();
   };
 
-  const startEdit = (address: PostalAddress) => {
-    setEditingId(address.id);
-    setFormData({
-      street: address.street,
-      postalCode: address.postalCode,
-      city: address.city,
-      country: address.country,
-      isDefaultBilling: address.isDefaultBilling,
-      isDefaultShipping: address.isDefaultShipping,
-    });
+  const handleFormSuccess = async () => {
+    await refreshAfterChange();
+    setEditingId(null);
+    setIsAdding(false);
+  };
+
+  const handleFormCancel = () => {
+    setEditingId(null);
     setIsAdding(false);
     setError("");
   };
 
-  const startAdd = () => {
-    setIsAdding(true);
-    setEditingId(null);
-    resetForm();
-  };
-
-  const cancelEdit = () => {
-    setIsAdding(false);
-    setEditingId(null);
-    resetForm();
-  };
-
-  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault();
-    setError("");
-
-    startTransition(async () => {
-      try {
-        if (editingId) {
-          // Mise à jour
-          await updateAddressAction(userId, editingId, formData);
-        } else {
-          // Création
-          await createAddressAction(userId, formData);
-        }
-
-        // Rafraîchir la liste des adresses
-        const updatedAddresses = await getUserAddressesAction(userId);
-        setAddresses(updatedAddresses);
-        update();
-        router.refresh();
-
-        // Réinitialiser le formulaire
-        cancelEdit();
-      } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Erreur lors de l'enregistrement"
-        );
-      }
-    });
-  };
-
-  const handleDelete = async (addressId: string) => {
+  const handleDelete = (addressId: string) => {
     if (!confirm("Êtes-vous sûr de vouloir supprimer cette adresse ?")) {
       return;
     }
@@ -132,10 +59,7 @@ export default function AddressSection({
     startTransition(async () => {
       try {
         await deleteAddressAction(userId, addressId);
-        const updatedAddresses = await getUserAddressesAction(userId);
-        setAddresses(updatedAddresses);
-        update();
-        router.refresh();
+        await refreshAfterChange();
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Erreur lors de la suppression"
@@ -155,7 +79,6 @@ export default function AddressSection({
         </div>
       )}
 
-      {/* Liste des adresses */}
       {addresses.length === 0 && !isAdding && editingId === null && (
         <Card className="bg-white border-2 border-dashed border-slate-300">
           <CardContent className="p-12 text-center">
@@ -167,7 +90,11 @@ export default function AddressSection({
               Ajoutez votre première adresse pour faciliter vos commandes
             </p>
             <Button
-              onClick={startAdd}
+              onClick={() => {
+                setIsAdding(true);
+                setEditingId(null);
+                setError("");
+              }}
               className="bg-black text-white hover:bg-slate-800"
             >
               <Plus className="w-4 h-4 mr-2" />
@@ -177,7 +104,6 @@ export default function AddressSection({
         </Card>
       )}
 
-      {/* Liste des adresses existantes */}
       {addresses.map((address) => (
         <Card
           key={address.id}
@@ -189,154 +115,21 @@ export default function AddressSection({
         >
           <CardContent className="p-6">
             {editingId === address.id ? (
-              <form onSubmit={handleSubmit} className="space-y-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h4 className="text-base font-semibold text-slate-900">
-                    Modifier l&apos;adresse
-                  </h4>
-                  <Button
-                    type="button"
-                    onClick={cancelEdit}
-                    variant="ghost"
-                    size="sm"
-                    className="h-8 w-8 p-0"
-                  >
-                    <X className="w-4 h-4" />
-                  </Button>
-                </div>
-
-                <div>
-                  <Label htmlFor={`street-${address.id}`} className="text-slate-700 text-sm font-medium">
-                    Rue *
-                  </Label>
-                  <Input
-                    id={`street-${address.id}`}
-                    type="text"
-                    value={formData.street}
-                    onChange={(e) =>
-                      setFormData({ ...formData, street: e.target.value })
-                    }
-                    className="bg-white text-black mt-1 border-slate-300"
-                    required
-                  />
-                </div>
-
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <Label
-                      htmlFor={`postalCode-${address.id}`}
-                      className="text-slate-700 text-sm font-medium"
-                    >
-                      Code postal *
-                    </Label>
-                    <Input
-                      id={`postalCode-${address.id}`}
-                      type="text"
-                      value={formData.postalCode}
-                      onChange={(e) =>
-                        setFormData({ ...formData, postalCode: e.target.value })
-                      }
-                      className="bg-white text-black mt-1 border-slate-300"
-                      required
-                    />
-                  </div>
-
-                  <div>
-                    <Label
-                      htmlFor={`city-${address.id}`}
-                      className="text-slate-700 text-sm font-medium"
-                    >
-                      Ville *
-                    </Label>
-                    <Input
-                      id={`city-${address.id}`}
-                      type="text"
-                      value={formData.city}
-                      onChange={(e) =>
-                        setFormData({ ...formData, city: e.target.value })
-                      }
-                      className="bg-white text-black mt-1 border-slate-300"
-                      required
-                    />
-                  </div>
-                </div>
-
-                <div>
-                  <Label
-                    htmlFor={`country-${address.id}`}
-                    className="text-slate-700 text-sm font-medium"
-                  >
-                    Pays *
-                  </Label>
-                  <Input
-                    id={`country-${address.id}`}
-                    type="text"
-                    value={formData.country}
-                    onChange={(e) =>
-                      setFormData({ ...formData, country: e.target.value })
-                    }
-                    className="bg-white text-black mt-1 border-slate-300"
-                    required
-                  />
-                </div>
-
-                <div className="flex flex-col gap-3 pt-2">
-                  <label className="flex items-center gap-3 cursor-pointer group">
-                    <input
-                      type="checkbox"
-                      checked={formData.isDefaultBilling}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          isDefaultBilling: e.target.checked,
-                        })
-                      }
-                      className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
-                    />
-                    <div className="flex items-center gap-2">
-                      <Building2 className="w-4 h-4 text-slate-600" />
-                      <span className="text-sm text-slate-700 group-hover:text-slate-900">
-                        Adresse de facturation par défaut
-                      </span>
-                    </div>
-                  </label>
-
-                  <label className="flex items-center gap-3 cursor-pointer group">
-                    <input
-                      type="checkbox"
-                      checked={formData.isDefaultShipping}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          isDefaultShipping: e.target.checked,
-                        })
-                      }
-                      className="w-4 h-4 text-green-600 border-slate-300 rounded focus:ring-green-500"
-                    />
-                    <div className="flex items-center gap-2">
-                      <Truck className="w-4 h-4 text-slate-600" />
-                      <span className="text-sm text-slate-700 group-hover:text-slate-900">
-                        Adresse de livraison par défaut
-                      </span>
-                    </div>
-                  </label>
-                </div>
-
-                <div className="flex gap-2 justify-end pt-2">
-                  <Button
-                    type="button"
-                    onClick={cancelEdit}
-                    variant="outline"
-                    className="border-slate-300"
-                  >
-                    Annuler
-                  </Button>
-                  <Button type="submit" className="bg-black text-white hover:bg-slate-800">
-                    <Check className="w-4 h-4 mr-2" />
-                    Enregistrer
-                  </Button>
-                </div>
-              </form>
+              <AddressForm
+                userId={userId}
+                initialValues={{
+                  street: address.street,
+                  postalCode: address.postalCode,
+                  city: address.city,
+                  country: address.country,
+                  isDefaultBilling: address.isDefaultBilling,
+                  isDefaultShipping: address.isDefaultShipping,
+                }}
+                editingId={address.id}
+                onSuccess={handleFormSuccess}
+                onCancel={handleFormCancel}
+                formIdSuffix={address.id}
+              />
             ) : (
               <>
                 <div className="flex justify-between items-start mb-4">
@@ -370,7 +163,11 @@ export default function AddressSection({
 
                 <div className="flex gap-2 pt-4 border-t border-slate-200">
                   <Button
-                    onClick={() => startEdit(address)}
+                    onClick={() => {
+                      setEditingId(address.id);
+                      setIsAdding(false);
+                      setError("");
+                    }}
                     variant="outline"
                     className="flex-1 border-slate-300 hover:bg-slate-50"
                     size="sm"
@@ -404,171 +201,25 @@ export default function AddressSection({
         </Card>
       ))}
 
-      {/* Formulaire d'ajout */}
       {isAdding && (
         <Card className="bg-white border-2 border-blue-500 shadow-lg">
           <CardContent className="p-6">
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="flex items-center justify-between mb-4">
-                <h4 className="text-base font-semibold text-slate-900 flex items-center gap-2">
-                  <Plus className="w-5 h-5" />
-                  Nouvelle adresse
-                </h4>
-                <Button
-                  type="button"
-                  onClick={cancelEdit}
-                  variant="ghost"
-                  size="sm"
-                  className="h-8 w-8 p-0"
-                >
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
-
-              <div>
-                <Label htmlFor="street-new" className="text-slate-700 text-sm font-medium">
-                  Rue *
-                </Label>
-                <Input
-                  id="street-new"
-                  type="text"
-                  value={formData.street}
-                  onChange={(e) =>
-                    setFormData({ ...formData, street: e.target.value })
-                  }
-                  className="bg-white text-black mt-1 border-slate-300"
-                  required
-                  placeholder="123 Rue de la République"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <Label
-                    htmlFor="postalCode-new"
-                    className="text-slate-700 text-sm font-medium"
-                  >
-                    Code postal *
-                  </Label>
-                  <Input
-                    id="postalCode-new"
-                    type="text"
-                    value={formData.postalCode}
-                    onChange={(e) =>
-                      setFormData({ ...formData, postalCode: e.target.value })
-                    }
-                    className="bg-white text-black mt-1 border-slate-300"
-                    required
-                    placeholder="75001"
-                  />
-                </div>
-
-                <div>
-                  <Label
-                    htmlFor="city-new"
-                    className="text-slate-700 text-sm font-medium"
-                  >
-                    Ville *
-                  </Label>
-                  <Input
-                    id="city-new"
-                    type="text"
-                    value={formData.city}
-                    onChange={(e) =>
-                      setFormData({ ...formData, city: e.target.value })
-                    }
-                    className="bg-white text-black mt-1 border-slate-300"
-                    required
-                    placeholder="Paris"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <Label
-                  htmlFor="country-new"
-                  className="text-slate-700 text-sm font-medium"
-                >
-                  Pays *
-                </Label>
-                <Input
-                  id="country-new"
-                  type="text"
-                  value={formData.country}
-                  onChange={(e) =>
-                    setFormData({ ...formData, country: e.target.value })
-                  }
-                  className="bg-white text-black mt-1 border-slate-300"
-                  required
-                  placeholder="France"
-                />
-              </div>
-
-              <div className="flex flex-col gap-3 pt-2">
-                <label className="flex items-center gap-3 cursor-pointer group">
-                  <input
-                    type="checkbox"
-                    checked={formData.isDefaultBilling}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        isDefaultBilling: e.target.checked,
-                      })
-                    }
-                    className="w-4 h-4 text-blue-600 border-slate-300 rounded focus:ring-blue-500"
-                  />
-                  <div className="flex items-center gap-2">
-                    <Building2 className="w-4 h-4 text-slate-600" />
-                    <span className="text-sm text-slate-700 group-hover:text-slate-900">
-                      Adresse de facturation par défaut
-                    </span>
-                  </div>
-                </label>
-
-                <label className="flex items-center gap-3 cursor-pointer group">
-                  <input
-                    type="checkbox"
-                    checked={formData.isDefaultShipping}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        isDefaultShipping: e.target.checked,
-                      })
-                    }
-                    className="w-4 h-4 text-green-600 border-slate-300 rounded focus:ring-green-500"
-                  />
-                  <div className="flex items-center gap-2">
-                    <Truck className="w-4 h-4 text-slate-600" />
-                    <span className="text-sm text-slate-700 group-hover:text-slate-900">
-                      Adresse de livraison par défaut
-                    </span>
-                  </div>
-                </label>
-              </div>
-
-              <div className="flex gap-2 justify-end pt-2">
-                <Button
-                  type="button"
-                  onClick={cancelEdit}
-                  variant="outline"
-                  className="border-slate-300"
-                >
-                  Annuler
-                </Button>
-                <Button type="submit" className="bg-black text-white hover:bg-slate-800">
-                  <Check className="w-4 h-4 mr-2" />
-                  Ajouter l&apos;adresse
-                </Button>
-              </div>
-            </form>
+            <AddressForm
+              userId={userId}
+              onSuccess={handleFormSuccess}
+              onCancel={handleFormCancel}
+            />
           </CardContent>
         </Card>
       )}
 
-      {/* Bouton d'ajout quand il y a déjà des adresses */}
       {addresses.length > 0 && !isAdding && editingId === null && (
         <Button
-          onClick={startAdd}
+          onClick={() => {
+            setIsAdding(true);
+            setEditingId(null);
+            setError("");
+          }}
           variant="outline"
           className="w-full border-2 border-dashed border-slate-300 hover:border-slate-400 hover:bg-slate-50"
         >
@@ -579,4 +230,3 @@ export default function AddressSection({
     </div>
   );
 }
-
