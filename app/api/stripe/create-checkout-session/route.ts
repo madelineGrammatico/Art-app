@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
       body = await request.json()
     } catch {
       return NextResponse.json(
-        { error: "Adresses de facturation et livraison requises" },
+        { error: "Requête invalide : body JSON malformé" },
         { status: 400 }
       )
     }

@@ -64,6 +64,17 @@ describe("POST /api/stripe/create-checkout-session", () => {
     expect(mockedCreateSession).not.toHaveBeenCalled()
   })
 
+  it("returns 400 when the request body is not valid JSON", async () => {
+    const user = await createUser()
+    mockedAuth.mockResolvedValue(sessionFor({ id: user.id }) as never)
+
+    const res = await POST(makeReq("not-json"))
+
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toMatch(/JSON/i)
+    expect(mockedCreateSession).not.toHaveBeenCalled()
+  })
+
   it("returns 400 when the user has no basket or an empty basket", async () => {
     const user = await createUser()
     const addr = await createAddress({ userId: user.id })
