@@ -3,7 +3,17 @@
 import { useState } from "react"
 import { Button } from "@/src/components/ui/button"
 
-export default function CheckoutButton() {
+type Props = {
+  billingAddressId: string
+  shippingAddressId: string
+  disabled?: boolean
+}
+
+export default function CheckoutButton({
+  billingAddressId,
+  shippingAddressId,
+  disabled,
+}: Props) {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -17,6 +27,7 @@ export default function CheckoutButton() {
         headers: {
           "Content-Type": "application/json",
         },
+        body: JSON.stringify({ billingAddressId, shippingAddressId }),
       })
 
       const data = await response.json()
@@ -25,7 +36,6 @@ export default function CheckoutButton() {
         throw new Error(data.error || "Erreur lors de la création de la session de paiement")
       }
 
-      // Rediriger vers Stripe Checkout
       if (data.url) {
         window.location.href = data.url
       } else {
@@ -41,7 +51,7 @@ export default function CheckoutButton() {
     <div className="flex flex-col gap-2">
       <Button
         onClick={handleCheckout}
-        disabled={isLoading}
+        disabled={isLoading || disabled}
         className="w-full bg-green-600 hover:bg-green-700 text-white"
         size="lg"
       >

@@ -13,6 +13,39 @@ type RefundFailure = {
   amountCents: number
 }
 
+type AddressFromMetadata = {
+  id: string
+  street: string
+  postalCode: string
+  city: string
+  country: string
+}
+
+// The snapshot of the address comes from Stripe metadata (frozen at checkout
+// session creation), so we don't need to query PostalAddress to fill snapshot
+// columns. We only query to decide whether the FK can be set: if the user
+// deleted the address between checkout and webhook, the row is gone and the
+// FK must be null (insert with a stale FK would violate the constraint).
+function parseAddressBlob(raw: string | undefined): AddressFromMetadata | null {
+  if (!raw) return null
+  try {
+    const parsed = JSON.parse(raw)
+    if (
+      parsed &&
+      typeof parsed.id === "string" &&
+      typeof parsed.street === "string" &&
+      typeof parsed.postalCode === "string" &&
+      typeof parsed.city === "string" &&
+      typeof parsed.country === "string"
+    ) {
+      return parsed as AddressFromMetadata
+    }
+    return null
+  } catch {
+    return null
+  }
+}
+
 // Handles the Stripe refund call + DB marker + user/admin notifications.
 // Idempotent on the Stripe side (idempotency key dedupes refunds).
 // Set `isRecovery: true` when called from the crash-recovery path: emails are
@@ -242,6 +275,23 @@ export async function POST(request: NextRequest) {
 
       const failures: RefundFailure[] = []
 
+      const billingAddress = parseAddressBlob(session.metadata?.billingAddress)
+      const shippingAddress = parseAddressBlob(session.metadata?.shippingAddress)
+      const candidateAddressIds = [billingAddress?.id, shippingAddress?.id].filter(
+        (id): id is string => !!id
+      )
+      const stillExisting = candidateAddressIds.length
+        ? await prisma.postalAddress.findMany({
+            where: { id: { in: candidateAddressIds } },
+            select: { id: true },
+          })
+        : []
+      const stillExistingIds = new Set(stillExisting.map((a) => a.id))
+      const billingAddressFk =
+        billingAddress && stillExistingIds.has(billingAddress.id) ? billingAddress.id : null
+      const shippingAddressFk =
+        shippingAddress && stillExistingIds.has(shippingAddress.id) ? shippingAddress.id : null
+
       try {
         await prisma.$transaction(async (tx) => {
           for (const artworkId of artworkIds) {
@@ -263,6 +313,16 @@ export async function POST(request: NextRequest) {
                 status,
                 stripeSessionId: session.id,
                 stripePaymentIntentId: paymentIntentId,
+                billingAddressId: billingAddressFk,
+                billingStreet: billingAddress?.street ?? null,
+                billingPostalCode: billingAddress?.postalCode ?? null,
+                billingCity: billingAddress?.city ?? null,
+                billingCountry: billingAddress?.country ?? null,
+                shippingAddressId: shippingAddressFk,
+                shippingStreet: shippingAddress?.street ?? null,
+                shippingPostalCode: shippingAddress?.postalCode ?? null,
+                shippingCity: shippingAddress?.city ?? null,
+                shippingCountry: shippingAddress?.country ?? null,
               },
             })
 

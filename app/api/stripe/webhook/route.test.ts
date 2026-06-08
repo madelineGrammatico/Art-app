@@ -29,6 +29,7 @@ import {
   createArtwork,
   createPendingInvoice,
   createBasketWithItem,
+  createAddress,
 } from "@/src/test/factories"
 
 const mockedVerify = vi.mocked(verifyWebhookSignature)
@@ -36,12 +37,32 @@ const mockedRefund = vi.mocked(stripe.refunds.create)
 const mockedUserMail = vi.mocked(sendRefundUserMail)
 const mockedAdminMail = vi.mocked(sendIncidentAdminMail)
 
+type AddressBlob = {
+  id: string
+  street: string
+  postalCode: string
+  city: string
+  country: string
+}
+
 function makeCheckoutCompletedEvent(args: {
   sessionId: string
   userId: string
   artworkIds: string[]
   paymentIntentId?: string | null
+  billingAddress?: AddressBlob
+  shippingAddress?: AddressBlob
 }): Stripe.Event {
+  const metadata: Record<string, string> = {
+    userId: args.userId,
+    artworkIds: args.artworkIds.join(","),
+  }
+  if (args.billingAddress) {
+    metadata.billingAddress = JSON.stringify(args.billingAddress)
+  }
+  if (args.shippingAddress) {
+    metadata.shippingAddress = JSON.stringify(args.shippingAddress)
+  }
   return {
     id: "evt_test_" + args.sessionId,
     type: "checkout.session.completed",
@@ -49,10 +70,7 @@ function makeCheckoutCompletedEvent(args: {
       object: {
         id: args.sessionId,
         payment_intent: args.paymentIntentId === undefined ? "pi_test_default" : args.paymentIntentId,
-        metadata: {
-          userId: args.userId,
-          artworkIds: args.artworkIds.join(","),
-        },
+        metadata,
       } as unknown as Stripe.Checkout.Session,
     },
   } as Stripe.Event
@@ -673,5 +691,198 @@ describe("POST /api/stripe/webhook", () => {
 
     expect(mockedUserMail).not.toHaveBeenCalled()
     expect(mockedAdminMail).not.toHaveBeenCalled()
+  })
+
+  it("attaches billing + shipping address FK and snapshot to the PAID invoice", async () => {
+    const buyer = await createUser()
+    const billing = await createAddress({
+      userId: buyer.id,
+      street: "10 avenue Foch",
+      postalCode: "75116",
+      city: "Paris",
+      country: "France",
+    })
+    const shipping = await createAddress({
+      userId: buyer.id,
+      street: "20 rue de Lyon",
+      postalCode: "69001",
+      city: "Lyon",
+      country: "France",
+    })
+    const artwork = await createArtwork({ price: 100 })
+    await createBasketWithItem({ userId: buyer.id, artworkId: artwork.id })
+    const sessionId = "cs_test_with_addresses"
+
+    mockedVerify.mockResolvedValue(
+      makeCheckoutCompletedEvent({
+        sessionId,
+        userId: buyer.id,
+        artworkIds: [artwork.id],
+        billingAddress: {
+          id: billing.id,
+          street: billing.street,
+          postalCode: billing.postalCode,
+          city: billing.city,
+          country: billing.country,
+        },
+        shippingAddress: {
+          id: shipping.id,
+          street: shipping.street,
+          postalCode: shipping.postalCode,
+          city: shipping.city,
+          country: shipping.country,
+        },
+      })
+    )
+
+    const res = await POST(makeRequest())
+    expect(res.status).toBe(200)
+
+    const invoice = await prisma.invoice.findFirst({
+      where: { stripeSessionId: sessionId },
+    })
+    expect(invoice?.status).toBe("PAID")
+    expect(invoice?.billingAddressId).toBe(billing.id)
+    expect(invoice?.billingStreet).toBe("10 avenue Foch")
+    expect(invoice?.billingPostalCode).toBe("75116")
+    expect(invoice?.billingCity).toBe("Paris")
+    expect(invoice?.billingCountry).toBe("France")
+    expect(invoice?.shippingAddressId).toBe(shipping.id)
+    expect(invoice?.shippingStreet).toBe("20 rue de Lyon")
+    expect(invoice?.shippingPostalCode).toBe("69001")
+    expect(invoice?.shippingCity).toBe("Lyon")
+    expect(invoice?.shippingCountry).toBe("France")
+  })
+
+  it("if billing address was deleted before webhook: snapshot is preserved, FK is null", async () => {
+    const buyer = await createUser()
+    const billing = await createAddress({
+      userId: buyer.id,
+      street: "10 avenue Foch",
+      postalCode: "75116",
+      city: "Paris",
+      country: "France",
+    })
+    const shipping = await createAddress({ userId: buyer.id })
+    const artwork = await createArtwork({ price: 100 })
+    await createBasketWithItem({ userId: buyer.id, artworkId: artwork.id })
+    const sessionId = "cs_test_billing_deleted"
+
+    const billingBlob = {
+      id: billing.id,
+      street: billing.street,
+      postalCode: billing.postalCode,
+      city: billing.city,
+      country: billing.country,
+    }
+    const shippingBlob = {
+      id: shipping.id,
+      street: shipping.street,
+      postalCode: shipping.postalCode,
+      city: shipping.city,
+      country: shipping.country,
+    }
+
+    // Race: user deletes the billing address between checkout and webhook.
+    await prisma.postalAddress.delete({ where: { id: billing.id } })
+
+    mockedVerify.mockResolvedValue(
+      makeCheckoutCompletedEvent({
+        sessionId,
+        userId: buyer.id,
+        artworkIds: [artwork.id],
+        billingAddress: billingBlob,
+        shippingAddress: shippingBlob,
+      })
+    )
+
+    const res = await POST(makeRequest())
+    expect(res.status).toBe(200)
+
+    const invoice = await prisma.invoice.findFirst({
+      where: { stripeSessionId: sessionId },
+    })
+    expect(invoice?.billingAddressId).toBeNull()
+    expect(invoice?.billingStreet).toBe("10 avenue Foch")
+    expect(invoice?.billingCity).toBe("Paris")
+    expect(invoice?.shippingAddressId).toBe(shipping.id)
+    expect(invoice?.shippingStreet).toBe(shipping.street)
+  })
+
+  it("backward compat: when metadata has no address blobs, invoice address fields stay null (no crash)", async () => {
+    const buyer = await createUser()
+    const artwork = await createArtwork({ price: 100 })
+    await createBasketWithItem({ userId: buyer.id, artworkId: artwork.id })
+    const sessionId = "cs_test_no_address_meta"
+
+    mockedVerify.mockResolvedValue(
+      makeCheckoutCompletedEvent({
+        sessionId,
+        userId: buyer.id,
+        artworkIds: [artwork.id],
+        // no billingAddress / shippingAddress (session created before B11)
+      })
+    )
+
+    const res = await POST(makeRequest())
+    expect(res.status).toBe(200)
+
+    const invoice = await prisma.invoice.findFirst({
+      where: { stripeSessionId: sessionId },
+    })
+    expect(invoice?.status).toBe("PAID")
+    expect(invoice?.billingAddressId).toBeNull()
+    expect(invoice?.billingStreet).toBeNull()
+    expect(invoice?.shippingAddressId).toBeNull()
+    expect(invoice?.shippingStreet).toBeNull()
+  })
+
+  it("multi-item: all PAID invoices in the order carry the same address FK + snapshot", async () => {
+    const buyer = await createUser()
+    const billing = await createAddress({ userId: buyer.id, city: "Bordeaux" })
+    const shipping = await createAddress({ userId: buyer.id, city: "Nice" })
+    const a1 = await createArtwork({ price: 100 })
+    const a2 = await createArtwork({ price: 200 })
+    await prisma.basket.create({
+      data: {
+        userId: buyer.id,
+        items: { create: [{ artworkId: a1.id }, { artworkId: a2.id }] },
+      },
+    })
+    const sessionId = "cs_test_multi_addresses"
+
+    mockedVerify.mockResolvedValue(
+      makeCheckoutCompletedEvent({
+        sessionId,
+        userId: buyer.id,
+        artworkIds: [a1.id, a2.id],
+        billingAddress: {
+          id: billing.id,
+          street: billing.street,
+          postalCode: billing.postalCode,
+          city: billing.city,
+          country: billing.country,
+        },
+        shippingAddress: {
+          id: shipping.id,
+          street: shipping.street,
+          postalCode: shipping.postalCode,
+          city: shipping.city,
+          country: shipping.country,
+        },
+      })
+    )
+
+    const res = await POST(makeRequest())
+    expect(res.status).toBe(200)
+
+    const invoices = await prisma.invoice.findMany({
+      where: { stripeSessionId: sessionId },
+    })
+    expect(invoices).toHaveLength(2)
+    expect(invoices.every((i) => i.billingAddressId === billing.id)).toBe(true)
+    expect(invoices.every((i) => i.billingCity === "Bordeaux")).toBe(true)
+    expect(invoices.every((i) => i.shippingAddressId === shipping.id)).toBe(true)
+    expect(invoices.every((i) => i.shippingCity === "Nice")).toBe(true)
   })
 })

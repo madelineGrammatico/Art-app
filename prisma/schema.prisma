@@ -11,27 +11,27 @@ datasource db {
 }
 
 model Artwork {
-  id            String        @id @default(uuid())
-  title         String
-  price         Decimal
+  id    String  @id @default(uuid())
+  title String
+  price Decimal
 
   ownerId       String?
-  owner         User?         @relation(fields: [ownerId], references: [id])
+  owner         User?        @relation(fields: [ownerId], references: [id])
   invoice       Invoice[]
-  certificateId String?       @unique
+  certificateId String?      @unique
   certificate   Certificate?
   basketItems   BasketItem[]
-  createdAt     DateTime      @default(now())
+  createdAt     DateTime     @default(now())
 
   @@index([ownerId])
 }
 
 model Certificate {
-  id          String    @id @default(uuid())
-  artworkId   String    @unique 
-  artwork     Artwork?  @relation(fields: [artworkId], references: [id], onDelete: Cascade)
-  issueDate   DateTime
-  content     String
+  id        String   @id @default(uuid())
+  artworkId String   @unique
+  artwork   Artwork? @relation(fields: [artworkId], references: [id], onDelete: Cascade)
+  issueDate DateTime
+  content   String
 }
 
 enum InvoiceStatus {
@@ -42,25 +42,44 @@ enum InvoiceStatus {
 }
 
 model Invoice {
-  id                   String        @id @default(uuid())
-  artworkId            String
-  artwork              Artwork       @relation(fields: [artworkId], references: [id])
-  buyerId              String
-  buyer                User          @relation(fields: [buyerId], references: [id], onDelete: Restrict)
-  createdAt            DateTime      @default(now())
-  amount               Decimal
-  status               InvoiceStatus
-  stripeSessionId      String?
+  id                    String        @id @default(uuid())
+  artworkId             String
+  artwork               Artwork       @relation(fields: [artworkId], references: [id])
+  buyerId               String
+  buyer                 User          @relation(fields: [buyerId], references: [id], onDelete: Restrict)
+  createdAt             DateTime      @default(now())
+  amount                Decimal
+  status                InvoiceStatus
+  stripeSessionId       String?
   stripePaymentIntentId String?
   // For REFUNDED invoices: id of the Stripe refund. null means the refund
   // has not been confirmed yet (used as a recovery marker if the webhook
   // crashed between the DB transaction and the stripe.refunds.create call).
-  stripeRefundId       String?
+  stripeRefundId        String?
+
+  // Addresses: FK + snapshot. The snapshot is the legal source of truth
+  // (frozen at purchase time); the FK is convenience navigation and is
+  // nulled if the user later deletes the address.
+  billingAddressId  String?
+  billingAddress    PostalAddress? @relation("InvoiceBilling", fields: [billingAddressId], references: [id], onDelete: SetNull)
+  billingStreet     String?
+  billingPostalCode String?
+  billingCity       String?
+  billingCountry    String?
+
+  shippingAddressId  String?
+  shippingAddress    PostalAddress? @relation("InvoiceShipping", fields: [shippingAddressId], references: [id], onDelete: SetNull)
+  shippingStreet     String?
+  shippingPostalCode String?
+  shippingCity       String?
+  shippingCountry    String?
 
   @@unique([stripeSessionId, artworkId])
   @@index([buyerId])
   @@index([artworkId])
   @@index([stripeSessionId])
+  @@index([billingAddressId])
+  @@index([shippingAddressId])
 }
 
 enum UserRole {
@@ -69,48 +88,48 @@ enum UserRole {
 }
 
 model User {
-  id                  String                @id @default(uuid())
-  name                String?
-  lastName            String?
-  firstName           String?
-  email               String?               @unique
-  emailVerified       DateTime?
-  password            String?
-  image               String?
-  role                UserRole              @default(CLIENT)
+  id            String    @id @default(uuid())
+  name          String?
+  lastName      String?
+  firstName     String?
+  email         String?   @unique
+  emailVerified DateTime?
+  password      String?
+  image         String?
+  role          UserRole  @default(CLIENT)
 
   invoices            Invoice[]
   artworks            Artwork[]
-  passwordResetTokens PasswordResetToken[]  
+  passwordResetTokens PasswordResetToken[]
   accounts            Account[]
   sessions            Session[]
   refreshTokens       RefreshToken[]
   postalAddresses     PostalAddress[]
   basket              Basket?
 
-  createdAt           DateTime              @default(now())
-  updatedAt           DateTime              @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 model RefreshToken {
-  id        String   @id @default(uuid())
-  token     String   @unique
-  userId    String
-  user      User     @relation(fields: [userId], references: [id])
-  expires   DateTime
+  id      String   @id @default(uuid())
+  token   String   @unique
+  userId  String
+  user    User     @relation(fields: [userId], references: [id])
+  expires DateTime
 }
 
 model PasswordResetToken {
-  id        String    @id @default(uuid())
-  token     String    @unique
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id        String   @id @default(uuid())
+  token     String   @unique
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
   userId    String
   expireAt  DateTime
-  createdAt DateTime  @default(now())
+  createdAt DateTime @default(now())
 }
 
 model Account {
-  id                String    @id @default(uuid())
+  id                String  @id @default(uuid())
   userId            String
   type              String
   provider          String
@@ -123,40 +142,43 @@ model Account {
   id_token          String?
   session_state     String?
 
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([provider, providerAccountId])
   @@index([userId])
 }
 
 model Session {
-  id            String   @id @default(uuid())
-  sessionToken  String   @unique
-  userId        String
-  expires       DateTime
-  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id           String   @id @default(uuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  createdAt     DateTime @default(now())
-  updatedAt     DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@index([userId])
 }
 
 model PostalAddress {
-  id               String   @id @default(uuid())
-  userId           String
-  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  street           String
-  postalCode       String
-  city             String
-  country          String
-  isDefaultBilling Boolean  @default(false)
+  id                String   @id @default(uuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  street            String
+  postalCode        String
+  city              String
+  country           String
+  isDefaultBilling  Boolean  @default(false)
   isDefaultShipping Boolean  @default(false)
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  billingInvoices  Invoice[] @relation("InvoiceBilling")
+  shippingInvoices Invoice[] @relation("InvoiceShipping")
 
   @@index([userId])
 }
@@ -185,15 +207,15 @@ model BasketItem {
   @@index([basketId])
   @@index([artworkId])
 }
- 
+
 // model VerificationToken {
 //   identifier String
 //   token      String
 //   expires    DateTime
- 
+
 //   @@unique([identifier, token])
 // }
- 
+
 // // Optional for WebAuthn support
 // model Authenticator {
 //   credentialID         String  @unique
@@ -204,8 +226,8 @@ model BasketItem {
 //   credentialDeviceType String
 //   credentialBackedUp   Boolean
 //   transports           String?
- 
+
 //   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
- 
+
 //   @@id([userId, credentialID])
 // }

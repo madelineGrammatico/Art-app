@@ -1,5 +1,5 @@
 import { auth } from '@/src/lib/auth/auth'
-import { getUserAction } from '../../api/users/user.action'
+import { getUserAction, getUserAddressesAction } from '../../api/users/user.action'
 import { redirect } from 'next/navigation'
 import Image from 'next/image'
 import { Card } from '@/src/components/ui/card'
@@ -8,7 +8,7 @@ import { Separator } from "@/src/components/ui/separator"
 import Link from 'next/link'
 import { Button } from '@/src/components/ui/button'
 import { prisma } from '@/src/lib/prisma'
-import CheckoutButton from '@/src/components/checkout/CheckoutButton'
+import CheckoutPanel from '@/src/components/checkout/CheckoutPanel'
 
 export default async function CheckoutPage() {
   const session = await auth()
@@ -28,6 +28,8 @@ export default async function CheckoutPage() {
       }
     }
   })
+
+  const addresses = await getUserAddressesAction(userId)
 
   const items = (basket?.items ?? []).map(item => ({
     id: item.id,
@@ -131,21 +133,7 @@ export default async function CheckoutPage() {
             </Card>
           ))}
 
-          <Card className="p-6 bg-slate-900">
-            <div className="flex flex-col gap-4">
-              <div className="flex justify-between items-center text-white">
-                <span className="text-lg font-semibold">Total</span>
-                <span className="text-2xl font-bold">{total.toFixed(2)} €</span>
-              </div>
-              <Separator className="bg-slate-700" />
-              <CheckoutButton />
-              <Link href="/profile/basket">
-                <Button variant="outline" className="w-full">
-                  Retour au panier
-                </Button>
-              </Link>
-            </div>
-          </Card>
+          <CheckoutPanel userId={userId} addresses={addresses} total={total} />
         </div>
       </section>
     </main>

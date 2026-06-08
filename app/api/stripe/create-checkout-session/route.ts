@@ -1,9 +1,9 @@
-import { NextResponse } from "next/server"
+import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/src/lib/auth/auth"
 import { prisma } from "@/src/lib/prisma"
 import { stripe, CURRENCY } from "@/src/lib/stripe/stripe"
 
-export async function POST() {
+export async function POST(request: NextRequest) {
   try {
     const session = await auth()
     if (!session || !session.user || !session.user.id) {
@@ -11,6 +11,31 @@ export async function POST() {
     }
 
     const userId = session.user.id
+
+    let body: unknown
+    try {
+      body = await request.json()
+    } catch {
+      return NextResponse.json(
+        { error: "Requête invalide : body JSON malformé" },
+        { status: 400 }
+      )
+    }
+    const { billingAddressId, shippingAddressId } = (body ?? {}) as {
+      billingAddressId?: unknown
+      shippingAddressId?: unknown
+    }
+    if (
+      typeof billingAddressId !== "string" ||
+      typeof shippingAddressId !== "string" ||
+      !billingAddressId ||
+      !shippingAddressId
+    ) {
+      return NextResponse.json(
+        { error: "Adresses de facturation et livraison requises" },
+        { status: 400 }
+      )
+    }
 
     const basket = await prisma.basket.findUnique({
       where: { userId },
@@ -29,6 +54,22 @@ export async function POST() {
     if (unavailableArtworks.length > 0) {
       return NextResponse.json(
         { error: `${unavailableArtworks.length} oeuvre${unavailableArtworks.length > 1 ? 's' : ''} n'est plus disponible` },
+        { status: 400 }
+      )
+    }
+
+    // Validate addresses: must exist AND belong to the session user.
+    // Single query handles both "unknown id" and "id of another user".
+    const uniqueIds = Array.from(new Set([billingAddressId, shippingAddressId]))
+    const ownedAddresses = await prisma.postalAddress.findMany({
+      where: { id: { in: uniqueIds }, userId },
+    })
+    const ownedById = new Map(ownedAddresses.map((a) => [a.id, a]))
+    const billing = ownedById.get(billingAddressId)
+    const shipping = ownedById.get(shippingAddressId)
+    if (!billing || !shipping) {
+      return NextResponse.json(
+        { error: "Adresse invalide ou inaccessible" },
         { status: 400 }
       )
     }
@@ -55,6 +96,25 @@ export async function POST() {
       quantity: 1
     }))
 
+    // Snapshot the addresses into metadata at session creation. Two upsides
+    // over fetching at webhook time: (1) zero race if the user deletes the
+    // address between checkout and webhook, (2) the address shown on the
+    // checkout page IS the one frozen on the invoice — single source of truth.
+    const billingAddressBlob = JSON.stringify({
+      id: billing.id,
+      street: billing.street,
+      postalCode: billing.postalCode,
+      city: billing.city,
+      country: billing.country,
+    })
+    const shippingAddressBlob = JSON.stringify({
+      id: shipping.id,
+      street: shipping.street,
+      postalCode: shipping.postalCode,
+      city: shipping.city,
+      country: shipping.country,
+    })
+
     const checkoutSession = await stripe.checkout.sessions.create({
       mode: "payment",
       line_items: lineItems,
@@ -66,7 +126,9 @@ export async function POST() {
       },
       metadata: {
         userId,
-        artworkIds: basket.items.map(item => item.artworkId).join(",")
+        artworkIds: basket.items.map(item => item.artworkId).join(","),
+        billingAddress: billingAddressBlob,
+        shippingAddress: shippingAddressBlob,
       }
     })
 
