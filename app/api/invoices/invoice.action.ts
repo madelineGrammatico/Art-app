@@ -5,33 +5,7 @@ import { prisma } from "@/src/lib/prisma"
 import { InvoiceStatus } from "@prisma/client"
 
 
-export const createInvoiceAction = async(
-    userId: string,
-    artworkId:string
-) => {
-    try{
-        const session = await auth()
-        if (!session || !session.user) throw new Error("non authorisé")
-        const artwork = await prisma.artwork.findUnique({
-            where: {id: artworkId}
-        })
-        if(!artwork) throw new Error("oeuvre non trouvé")
-
-        const invoice = await prisma.invoice.create({
-            data: {
-                artworkId: artwork.id,
-                buyerId: userId,
-                amount: artwork.price,
-                status: "PENDING"
-            }
-        })
-        return invoice
-    } catch(error){
-        return {error: error}
-    }
-}
-
-export const getUserIvoiceAction = async(userId: string) => {
+export const getUserInvoiceAction = async(userId: string) => {
     try {
         const session = await auth()
         if (!session || !session.user) throw new Error("non authorisé")
@@ -45,11 +19,12 @@ export const getUserIvoiceAction = async(userId: string) => {
 
         return user.invoices
     } catch(error) {
-       return {error: error}
+        console.error(error)
+        return { error: error instanceof Error ? error.message : "Erreur lors de la récupération des factures" }
     }
 }
 
-export const getIvoiceAction = async(
+export const getInvoiceAction = async(
     invoiceId: string,
 ) => {
     try {
@@ -67,11 +42,12 @@ export const getIvoiceAction = async(
 
         return invoice
     } catch(error) {
-       return {error: error}
+        console.error(error)
+        return { error: error instanceof Error ? error.message : "Erreur lors de la récupération de la facture" }
     }
 }
 
-export const updateIvoiceAction = async(
+export const updateInvoiceAction = async(
     invoiceId: string,
     status: InvoiceStatus,
 ) => {
@@ -89,10 +65,10 @@ export const updateIvoiceAction = async(
                status
             }
         })
-        if (!invoice) throw new Error("facture non trouvé")
 
         return invoice
     } catch(error) {
-       return {error: error}
+        console.error(error)
+        return { error: error instanceof Error ? error.message : "Erreur lors de la mise à jour de la facture" }
     }
 }

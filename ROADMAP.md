@@ -10,17 +10,17 @@ Raison de l'ordre INVOICE avant SHIPING : une fois `Invoice` structurée en line
 
 ---
 
-## B13_INVOICE — Refacto facturation (`app/api/invoices/route.ts`)
+## B13_INVOICE — Refacto facturation (`app/api/invoices/invoice.action.ts`)
 
 Prévu **après** la couverture de tests (déjà en place). Mérite sa propre branche dédiée.
 
-**Corrections techniques :**
-1. **Trou de permission** dans `createInvoiceAction` (`route.ts:8-32`) : aucun check `userId === session.user.id`, fichier `"use server"`. Sévérité réelle **faible** (fonction sans caller, artwork non transféré car le webhook check `ownerId: null`, invoice sans `stripeSessionId` jamais activée). À traiter quand même → **décider : supprimer la fonction orpheline (préférable) ou ajouter le check.**
-2. **Format d'erreur incohérent** : `route.ts` renvoie `{error: error}` (objet Error), `basket.action.ts` renvoie `{error: error.message}` (string). Aligner sur le pattern basket.
-3. **Code mort** dans `updateIvoiceAction` (`route.ts:92`) : `if (!invoice) throw...` inatteignable (`prisma.update` throw déjà). Supprimer.
-4. **Typos** dans les exports : `getUserIvoiceAction`, `getIvoiceAction`, `updateIvoiceAction` (`Ivoice` → `Invoice`). Renommer.
+**Corrections techniques — ✅ FAIT (étape 1) :**
+1. ✅ **Trou de permission** dans `createInvoiceAction` : **fonction supprimée** (orpheline + aucun check `userId === session.user.id`). Vérifié : en prod les invoices ne sont créées que par le webhook Stripe (`webhook/route.ts`, transaction `ownerId: null`).
+2. ✅ **Format d'erreur** aligné sur le pattern basket : `console.error(error)` + `return { error: error instanceof Error ? error.message : "<fallback fr>" }` (string).
+3. ✅ **Code mort** supprimé (`if (!invoice) throw...` après `prisma.update`).
+4. ✅ **Typos** corrigées : `getUserInvoiceAction`, `getInvoiceAction`, `updateInvoiceAction`. Tests adaptés (`invoice.action.test.ts`).
 
-**Évolution du modèle (vraie facture client) :**
+**Évolution du modèle (vraie facture client) — étape 2, reste à faire :**
 5. Passer de `1 invoice / artwork` à **1 facture / commande avec line items**. À prévoir :
    - **Numéro de facture** unique séquentiel (obligation légale, Code de commerce).
    - **Mentions légales** : SIRET, raison sociale, TVA si applicable.
@@ -29,7 +29,7 @@ Prévu **après** la couverture de tests (déjà en place). Mérite sa propre br
    - **PDF** (« support durable » attendu en cas de litige, Code conso art. L221-13).
 6. **Email facture client** : à faire **dans cette refacto**. Intérim actuel = reçu Stripe natif (`receipt_email`) qui couvre l'obligation légale.
 
-> Les tests dans `app/api/invoices/route.test.ts` devront être adaptés (assertions `res.error.message`).
+> Tests : `app/api/invoices/invoice.action.test.ts` (assertions `res.error` désormais en string). Le filet `by-session/route.test.ts` couvre la lecture par session Stripe.
 
 ---
 
