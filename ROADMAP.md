@@ -21,6 +21,9 @@ Prévu **après** la couverture de tests (déjà en place). Mérite sa propre br
 4. ✅ **Typos** corrigées : `getUserInvoiceAction`, `getInvoiceAction`, `updateInvoiceAction`. Tests adaptés (`invoice.action.test.ts`).
 
 **Évolution du modèle (vraie facture client) — étape 2, reste à faire :**
+
+> Besoins détaillés en user stories (→ tests) : [docs/B13-invoice-user-stories.md](docs/B13-invoice-user-stories.md). Décisions actées : 1 facture/commande en line items, avoir = même modèle `Invoice` (`type = CREDIT_NOTE`), régime TVA en config snapshotée, anti-doublon via `unique(stripeSessionId)` / `unique(stripeRefundId)`.
+
 5. Passer de `1 invoice / artwork` à **1 facture / commande avec line items**. À prévoir :
    - **Numéro de facture** unique séquentiel (obligation légale, Code de commerce).
    - **Mentions légales** : SIRET, raison sociale, TVA si applicable.
