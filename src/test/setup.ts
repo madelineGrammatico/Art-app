@@ -5,6 +5,8 @@ const TABLES = [
   "Counter",
   "BasketItem",
   "Basket",
+  "RefundRecovery",
+  "InvoiceLineItem",
   "Invoice",
   "Certificate",
   "PostalAddress",

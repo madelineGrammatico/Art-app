@@ -20,19 +20,21 @@ Prévu **après** la couverture de tests (déjà en place). Mérite sa propre br
 3. ✅ **Code mort** supprimé (`if (!invoice) throw...` après `prisma.update`).
 4. ✅ **Typos** corrigées : `getUserInvoiceAction`, `getInvoiceAction`, `updateInvoiceAction`. Tests adaptés (`invoice.action.test.ts`).
 
-**Évolution du modèle (vraie facture client) — étape 2, reste à faire :**
+**Évolution du modèle (vraie facture client) — étape 2, en cours :**
 
-> Besoins détaillés en user stories (→ tests) : [docs/B13-invoice-user-stories.md](docs/B13-invoice-user-stories.md). Spec technique (contrats, modèle, numérotation, déclencheurs) : [docs/B13-invoice-spec.md](docs/B13-invoice-spec.md) — **validée, prête pour les tests**. Décisions actées : 1 facture/commande en line items, avoir = même modèle `Invoice` (`type = CREDIT_NOTE`), régime TVA en config snapshotée, anti-doublon via `unique(stripeSessionId)` / `unique(stripeRefundId)`.
+> Besoins détaillés en user stories (→ tests) : [docs/B13-invoice-user-stories.md](docs/B13-invoice-user-stories.md). Spec technique (contrats, modèle, numérotation, déclencheurs) : [docs/B13-invoice-spec.md](docs/B13-invoice-spec.md). Décisions actées : 1 facture/commande en line items, avoir = même modèle `Invoice` (`type = CREDIT_NOTE`), régime TVA en config snapshotée, anti-doublon via `unique([type, stripeSessionId])` / `unique(stripeRefundId)`.
 
-5. Passer de `1 invoice / artwork` à **1 facture / commande avec line items**. À prévoir :
-   - **Numéro de facture** unique séquentiel (obligation légale, Code de commerce).
-   - **Mentions légales** : SIRET, raison sociale, TVA si applicable.
-   - **Conservation 10 ans** structurée.
-   - **TVA art** : 5,5 % réduite pour œuvres originales en France (vs 20 %) — à modéliser.
-   - **PDF** (« support durable » attendu en cas de litige, Code conso art. L221-13).
-6. **Email facture client** : à faire **dans cette refacto**. Intérim actuel = reçu Stripe natif (`receipt_email`) qui couvre l'obligation légale.
+5. ✅ **FAIT** — `1 invoice / artwork` → **1 facture / commande avec line items** :
+   - ✅ **Numéro séquentiel** unique sans trou (table `Counter`, séries `INV-`/`CN-` par an).
+   - ✅ **Snapshot vendeur** (SIRET, raison sociale, régime TVA) figé à l'émission via config.
+   - ✅ **TVA par ligne** (franchise → mention 293 B ; 5,5 % prêt côté code).
+   - ⏳ **Conservation 10 ans** structurée (soft-delete) — reste à faire.
+   - ⏳ **PDF** (« support durable », Code conso art. L221-13) — reste à faire.
+6. ⏳ **Email facture client** — reste à faire. Intérim actuel = reçu Stripe natif (`receipt_email`).
 
-> Tests : `app/api/invoices/invoice.action.test.ts` (assertions `res.error` désormais en string). Le filet `by-session/route.test.ts` couvre la lecture par session Stripe.
+**Reste à faire (étape 2) :** PDF + email facture (EPIC 3), facture d'avoir `emitCreditNote` + flux remboursement après-vente (EPIC 5), validation config au boot (US0.1), UI admin de remboursement.
+
+> Notes prod : migration destructive (ancien modèle `Invoice` incompatible — `npm run db:reset` en dev) ; variables d'env **`SELLER_*`** désormais requises pour que le webhook émette les factures (dev + prod, pas `.env.test` car mocké).
 
 ---
 

@@ -2,7 +2,6 @@
 
 import { auth } from "@/src/lib/auth/auth"
 import { prisma } from "@/src/lib/prisma"
-import { InvoiceStatus } from "@prisma/client"
 
 
 export const getUserInvoiceAction = async(userId: string) => {
@@ -12,7 +11,7 @@ export const getUserInvoiceAction = async(userId: string) => {
 
         const user = await prisma.user.findUnique({
             where : {id: userId},
-            include: {invoices: true}
+            include: {invoices: {include: {lineItems: true}}}
         })
         if (!user) throw new Error("Utilisateur non trouvé")
         if (session.user.role !== "ADMIN" && user.id !== session.user.id) throw new Error("non authorisé")
@@ -32,7 +31,8 @@ export const getInvoiceAction = async(
         if (!session || !session.user) throw new Error("non authorisé")
 
         const invoice = await prisma.invoice.findUnique({
-            where : {id: invoiceId}
+            where : {id: invoiceId},
+            include: {lineItems: true}
         })
         if (!invoice) throw new Error("facture non trouvé")
         if (
@@ -47,28 +47,5 @@ export const getInvoiceAction = async(
     }
 }
 
-export const updateInvoiceAction = async(
-    invoiceId: string,
-    status: InvoiceStatus,
-) => {
-    try {
-        const session = await auth()
-        if (
-            !session
-            || !session.user
-            || session.user.role !== "ADMIN"
-        ) throw new Error("non authorisé")
-
-        const invoice = await prisma.invoice.update({
-            where : {id: invoiceId},
-            data: {
-               status
-            }
-        })
-
-        return invoice
-    } catch(error) {
-        console.error(error)
-        return { error: error instanceof Error ? error.message : "Erreur lors de la mise à jour de la facture" }
-    }
-}
+// Pas d'updateInvoiceAction : une facture émise est immuable (B13 EPIC 6).
+// Toute correction passe par une facture d'avoir (CREDIT_NOTE).

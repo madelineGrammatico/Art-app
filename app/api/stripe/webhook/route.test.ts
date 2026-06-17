@@ -17,6 +17,24 @@ vi.mock("@/src/lib/mail/refundUserMail", () => ({
 vi.mock("@/src/lib/mail/incidentAdminMail", () => ({
   sendIncidentAdminMail: vi.fn(),
 }))
+// Config vendeur fixe (franchise) pour que emitSaleInvoice ne dépende pas de l'env.
+vi.mock("@/src/lib/invoice/sellerConfig", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/src/lib/invoice/sellerConfig")>()
+  return {
+    ...actual,
+    getSellerConfig: () => ({
+      name: "Galerie Test",
+      legalForm: "Entreprise individuelle",
+      address: "1 rue de Test, 75001 Paris",
+      siret: "12345678901234",
+      rcs: null,
+      vatNumber: null,
+      vatRegime: "FRANCHISE" as const,
+      vatRate: 0,
+      legalMention: actual.FRANCHISE_VAT_MENTION,
+    }),
+  }
+})
 
 import { POST } from "./route"
 import { verifyWebhookSignature } from "@/src/lib/stripe/webhook-handler"
@@ -27,7 +45,7 @@ import { prisma } from "@/src/lib/prisma"
 import {
   createUser,
   createArtwork,
-  createPendingInvoice,
+  createRefundRecovery,
   createBasketWithItem,
   createAddress,
 } from "@/src/test/factories"
@@ -106,6 +124,12 @@ function makeRequest(body = "{}") {
   })
 }
 
+const saleInvoice = (sessionId: string) =>
+  prisma.invoice.findFirst({
+    where: { type: "SALE", stripeSessionId: sessionId },
+    include: { lineItems: true },
+  })
+
 beforeEach(() => {
   mockedVerify.mockReset()
   mockedRefund.mockReset()
@@ -138,9 +162,9 @@ describe("POST /api/stripe/webhook", () => {
     expect(await res.json()).toEqual({ error: "Invalid signature" })
   })
 
-  it("on checkout.session.completed: creates PAID invoice, transfers ownership, clears basket", async () => {
+  it("on checkout.session.completed: creates ONE sale invoice with a line item, transfers ownership, clears basket", async () => {
     const buyer = await createUser()
-    const artwork = await createArtwork({ price: 250 })
+    const artwork = await createArtwork({ title: "Crépuscule", price: 250 })
     await createBasketWithItem({ userId: buyer.id, artworkId: artwork.id })
     const sessionId = "cs_test_success"
 
@@ -158,12 +182,17 @@ describe("POST /api/stripe/webhook", () => {
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ received: true })
 
-    const invoice = await prisma.invoice.findFirst({ where: { stripeSessionId: sessionId } })
-    expect(invoice?.status).toBe("PAID")
+    const invoice = await saleInvoice(sessionId)
+    expect(invoice).not.toBeNull()
+    expect(invoice?.type).toBe("SALE")
+    expect(invoice?.number).toMatch(/^INV-\d{4}-\d{6}$/)
     expect(invoice?.buyerId).toBe(buyer.id)
-    expect(invoice?.artworkId).toBe(artwork.id)
-    expect(Number(invoice?.amount)).toBe(250)
     expect(invoice?.stripePaymentIntentId).toBe("pi_test_ok")
+    expect(Number(invoice?.totalTTC)).toBe(250)
+    expect(invoice?.lineItems).toHaveLength(1)
+    expect(invoice?.lineItems[0].artworkId).toBe(artwork.id)
+    expect(invoice?.lineItems[0].label).toBe("Crépuscule")
+    expect(Number(invoice?.lineItems[0].lineTTC)).toBe(250)
 
     const updatedArtwork = await prisma.artwork.findUnique({ where: { id: artwork.id } })
     expect(updatedArtwork?.ownerId).toBe(buyer.id)
@@ -176,7 +205,7 @@ describe("POST /api/stripe/webhook", () => {
     expect(mockedRefund).not.toHaveBeenCalled()
   })
 
-  it("is idempotent: replaying the same event does not duplicate invoices or re-process", async () => {
+  it("is idempotent: replaying the same event does not duplicate the invoice", async () => {
     const buyer = await createUser()
     const artwork = await createArtwork({ price: 100 })
     await createBasketWithItem({ userId: buyer.id, artworkId: artwork.id })
@@ -197,10 +226,9 @@ describe("POST /api/stripe/webhook", () => {
     expect(res.status).toBe(200)
     const invoices = await prisma.invoice.findMany({ where: { stripeSessionId: sessionId } })
     expect(invoices).toHaveLength(1)
-    expect(invoices[0].status).toBe("PAID")
   })
 
-  it("pre-checkout race: artwork already owned by another user → REFUNDED + Stripe refund + emails", async () => {
+  it("full race: artwork already owned → no invoice, RefundRecovery, Stripe refund + emails", async () => {
     const otherBuyer = await createUser()
     const lateBuyer = await createUser({ email: "late@test.local" })
     const artwork = await createArtwork({ title: "Crépuscule", price: 100, ownerId: otherBuyer.id })
@@ -220,20 +248,18 @@ describe("POST /api/stripe/webhook", () => {
 
     expect(res.status).toBe(200)
 
-    const invoice = await prisma.invoice.findFirst({ where: { stripeSessionId: sessionId } })
-    expect(invoice?.status).toBe("REFUNDED")
-    expect(invoice?.buyerId).toBe(lateBuyer.id)
-    expect(Number(invoice?.amount)).toBe(100)
+    expect(await saleInvoice(sessionId)).toBeNull()
+    const recoveries = await prisma.refundRecovery.findMany({ where: { stripeSessionId: sessionId } })
+    expect(recoveries).toHaveLength(1)
+    expect(recoveries[0].artworkId).toBe(artwork.id)
+    expect(recoveries[0].buyerId).toBe(lateBuyer.id)
 
     const stillOwnedByOther = await prisma.artwork.findUnique({ where: { id: artwork.id } })
     expect(stillOwnedByOther?.ownerId).toBe(otherBuyer.id)
 
     expect(mockedRefund).toHaveBeenCalledOnce()
     expect(mockedRefund).toHaveBeenCalledWith(
-      {
-        payment_intent: "pi_test_full_refund",
-        amount: 10000,
-      },
+      { payment_intent: "pi_test_full_refund", amount: 10000 },
       { idempotencyKey: `refund-${sessionId}` }
     )
 
@@ -254,17 +280,13 @@ describe("POST /api/stripe/webhook", () => {
         refundOutcome: "issued",
         refundError: undefined,
         affectedItems: [
-          expect.objectContaining({
-            artworkId: artwork.id,
-            title: "Crépuscule",
-            amountEur: 100,
-          }),
+          expect.objectContaining({ artworkId: artwork.id, title: "Crépuscule", amountEur: 100 }),
         ],
       })
     )
   })
 
-  it("partial race: 1 available + 1 already taken → PAID + REFUNDED + partial Stripe refund", async () => {
+  it("partial race: 1 available + 1 taken → invoice with 1 line item + 1 RefundRecovery + partial refund", async () => {
     const buyer = await createUser()
     const otherOwner = await createUser()
     const available = await createArtwork({ price: 100 })
@@ -291,15 +313,13 @@ describe("POST /api/stripe/webhook", () => {
 
     expect(res.status).toBe(200)
 
-    const invoices = await prisma.invoice.findMany({
-      where: { stripeSessionId: sessionId },
-      orderBy: { amount: "asc" },
-    })
-    expect(invoices).toHaveLength(2)
-    const paid = invoices.find((i) => i.status === "PAID")
-    const refunded = invoices.find((i) => i.status === "REFUNDED")
-    expect(paid?.artworkId).toBe(available.id)
-    expect(refunded?.artworkId).toBe(taken.id)
+    const invoice = await saleInvoice(sessionId)
+    expect(invoice?.lineItems).toHaveLength(1)
+    expect(invoice?.lineItems[0].artworkId).toBe(available.id)
+
+    const recoveries = await prisma.refundRecovery.findMany({ where: { stripeSessionId: sessionId } })
+    expect(recoveries).toHaveLength(1)
+    expect(recoveries[0].artworkId).toBe(taken.id)
 
     const availableAfter = await prisma.artwork.findUnique({ where: { id: available.id } })
     const takenAfter = await prisma.artwork.findUnique({ where: { id: taken.id } })
@@ -307,10 +327,7 @@ describe("POST /api/stripe/webhook", () => {
     expect(takenAfter?.ownerId).toBe(otherOwner.id)
 
     expect(mockedRefund).toHaveBeenCalledWith(
-      {
-        payment_intent: "pi_test_partial",
-        amount: 25000,
-      },
+      { payment_intent: "pi_test_partial", amount: 25000 },
       { idempotencyKey: `refund-${sessionId}` }
     )
   })
@@ -333,68 +350,15 @@ describe("POST /api/stripe/webhook", () => {
 
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ received: true })
-    const invoices = await prisma.invoice.findMany()
-    expect(invoices).toHaveLength(0)
+    expect(await prisma.invoice.findMany()).toHaveLength(0)
+    expect(await prisma.refundRecovery.findMany()).toHaveLength(0)
     expect(mockedRefund).not.toHaveBeenCalled()
   })
 
-  it("on checkout.session.expired: deletes PENDING invoices for that session", async () => {
+  it("on checkout.session.expired: no-op (returns 200, leaves basket untouched)", async () => {
     const buyer = await createUser()
-    const a1 = await createArtwork()
-    const a2 = await createArtwork()
+    const artwork = await createArtwork()
     const sessionId = "cs_test_expired"
-    await createPendingInvoice({
-      buyerId: buyer.id,
-      artworkId: a1.id,
-      stripeSessionId: sessionId,
-    })
-    await createPendingInvoice({
-      buyerId: buyer.id,
-      artworkId: a2.id,
-      stripeSessionId: sessionId,
-    })
-
-    mockedVerify.mockResolvedValue(makeCheckoutExpiredEvent({ sessionId }))
-
-    const res = await POST(makeRequest())
-
-    expect(res.status).toBe(200)
-    const remaining = await prisma.invoice.findMany({ where: { stripeSessionId: sessionId } })
-    expect(remaining).toHaveLength(0)
-  })
-
-  it("on checkout.session.expired: does NOT touch PAID invoices (safety)", async () => {
-    const buyer = await createUser()
-    const artwork = await createArtwork()
-    const sessionId = "cs_test_expired_safe"
-    const paidInvoice = await prisma.invoice.create({
-      data: {
-        buyerId: buyer.id,
-        artworkId: artwork.id,
-        amount: 100,
-        status: "PAID",
-        stripeSessionId: sessionId,
-      },
-    })
-
-    mockedVerify.mockResolvedValue(makeCheckoutExpiredEvent({ sessionId }))
-
-    const res = await POST(makeRequest())
-
-    expect(res.status).toBe(200)
-    const still = await prisma.invoice.findUnique({ where: { id: paidInvoice.id } })
-    expect(still?.status).toBe("PAID")
-  })
-
-  it("on checkout.session.expired: leaves the basket untouched so user can retry", async () => {
-    const buyer = await createUser()
-    const artwork = await createArtwork()
-    const sessionId = "cs_test_expired_basket"
-    await createPendingInvoice({
-      buyerId: buyer.id,
-      artworkId: artwork.id,
-      stripeSessionId: sessionId,
-    })
     await createBasketWithItem({ userId: buyer.id, artworkId: artwork.id })
 
     mockedVerify.mockResolvedValue(makeCheckoutExpiredEvent({ sessionId }))
@@ -402,20 +366,22 @@ describe("POST /api/stripe/webhook", () => {
     const res = await POST(makeRequest())
 
     expect(res.status).toBe(200)
+    expect(await prisma.invoice.findMany()).toHaveLength(0)
     const basketItems = await prisma.basketItem.findMany({
       where: { basket: { userId: buyer.id } },
     })
     expect(basketItems).toHaveLength(1)
-    expect(basketItems[0].artworkId).toBe(artwork.id)
   })
 
   it("returns 200 for unknown event types without modifying any data", async () => {
     const buyer = await createUser()
-    const artwork = await createArtwork()
-    const pending = await createPendingInvoice({
+    const otherOwner = await createUser()
+    const taken = await createArtwork({ ownerId: otherOwner.id })
+    await createRefundRecovery({
       buyerId: buyer.id,
-      artworkId: artwork.id,
+      artworkId: taken.id,
       stripeSessionId: "cs_test_unknown",
+      stripeRefundId: "re_existing",
     })
 
     mockedVerify.mockResolvedValue(makeUnknownEvent({ sessionId: "cs_test_unknown" }))
@@ -424,11 +390,12 @@ describe("POST /api/stripe/webhook", () => {
 
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ received: true })
-    const unchanged = await prisma.invoice.findUnique({ where: { id: pending.id } })
-    expect(unchanged?.status).toBe("PENDING")
+    const recoveries = await prisma.refundRecovery.findMany({ where: { stripeSessionId: "cs_test_unknown" } })
+    expect(recoveries).toHaveLength(1)
+    expect(recoveries[0].stripeRefundId).toBe("re_existing")
   })
 
-  it("on multi-item checkout: creates N PAID invoices and transfers ALL artworks", async () => {
+  it("on multi-item checkout: ONE invoice with N line items, transfers ALL artworks", async () => {
     const buyer = await createUser()
     const a1 = await createArtwork({ price: 100 })
     const a2 = await createArtwork({ price: 200 })
@@ -436,9 +403,7 @@ describe("POST /api/stripe/webhook", () => {
     await prisma.basket.create({
       data: {
         userId: buyer.id,
-        items: {
-          create: [{ artworkId: a1.id }, { artworkId: a2.id }, { artworkId: a3.id }],
-        },
+        items: { create: [{ artworkId: a1.id }, { artworkId: a2.id }, { artworkId: a3.id }] },
       },
     })
     const sessionId = "cs_test_multi"
@@ -456,14 +421,11 @@ describe("POST /api/stripe/webhook", () => {
 
     expect(res.status).toBe(200)
 
-    const invoices = await prisma.invoice.findMany({ where: { stripeSessionId: sessionId } })
-    expect(invoices).toHaveLength(3)
-    expect(invoices.every((i) => i.status === "PAID")).toBe(true)
-    expect(invoices.every((i) => i.stripePaymentIntentId === "pi_test_multi")).toBe(true)
+    const invoice = await saleInvoice(sessionId)
+    expect(invoice?.lineItems).toHaveLength(3)
+    expect(Number(invoice?.totalTTC)).toBe(600)
 
-    const artworks = await prisma.artwork.findMany({
-      where: { id: { in: [a1.id, a2.id, a3.id] } },
-    })
+    const artworks = await prisma.artwork.findMany({ where: { id: { in: [a1.id, a2.id, a3.id] } } })
     expect(artworks.every((a) => a.ownerId === buyer.id)).toBe(true)
 
     const basketItems = await prisma.basketItem.findMany({
@@ -474,7 +436,7 @@ describe("POST /api/stripe/webhook", () => {
     expect(mockedRefund).not.toHaveBeenCalled()
   })
 
-  it("if Stripe refund fails: invoices stay REFUNDED, no user mail, admin mail with URGENT flag", async () => {
+  it("if Stripe refund fails: RefundRecovery stays unstamped, no user mail, admin mail failed", async () => {
     const buyer = await createUser({ email: "buyer@test.local" })
     const owner = await createUser()
     const taken = await createArtwork({ title: "Aurore", price: 100, ownerId: owner.id })
@@ -493,12 +455,11 @@ describe("POST /api/stripe/webhook", () => {
     const res = await POST(makeRequest())
 
     expect(res.status).toBe(200)
-    const invoice = await prisma.invoice.findFirst({ where: { stripeSessionId: sessionId } })
-    expect(invoice?.status).toBe("REFUNDED")
+    const recovery = await prisma.refundRecovery.findFirst({ where: { stripeSessionId: sessionId } })
+    expect(recovery?.stripeRefundId).toBeNull()
     expect(mockedRefund).toHaveBeenCalledOnce()
 
     expect(mockedUserMail).not.toHaveBeenCalled()
-
     expect(mockedAdminMail).toHaveBeenCalledOnce()
     expect(mockedAdminMail).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -509,7 +470,7 @@ describe("POST /api/stripe/webhook", () => {
     )
   })
 
-  it("buyer not found in DB: returns 200 without writing invoices (defense in depth)", async () => {
+  it("buyer not found in DB: returns 200 without writing anything (defense in depth)", async () => {
     const artwork = await createArtwork({ price: 100 })
     const sessionId = "cs_test_no_user"
 
@@ -526,14 +487,12 @@ describe("POST /api/stripe/webhook", () => {
 
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ received: true })
-    const invoices = await prisma.invoice.findMany({ where: { stripeSessionId: sessionId } })
-    expect(invoices).toHaveLength(0)
+    expect(await prisma.invoice.findMany()).toHaveLength(0)
+    expect(await prisma.refundRecovery.findMany()).toHaveLength(0)
     expect(mockedRefund).not.toHaveBeenCalled()
-    expect(mockedUserMail).not.toHaveBeenCalled()
-    expect(mockedAdminMail).not.toHaveBeenCalled()
   })
 
-  it("race with NULL payment_intent: invoices REFUNDED in DB, NO refund call, admin alert URGENT", async () => {
+  it("race with NULL payment_intent: RefundRecovery created, NO refund call, admin alert failed", async () => {
     const buyer = await createUser({ email: "buyer@test.local" })
     const otherOwner = await createUser()
     const taken = await createArtwork({ title: "Crépuscule", price: 100, ownerId: otherOwner.id })
@@ -551,12 +510,11 @@ describe("POST /api/stripe/webhook", () => {
     const res = await POST(makeRequest())
 
     expect(res.status).toBe(200)
-    const invoice = await prisma.invoice.findFirst({ where: { stripeSessionId: sessionId } })
-    expect(invoice?.status).toBe("REFUNDED")
+    const recovery = await prisma.refundRecovery.findFirst({ where: { stripeSessionId: sessionId } })
+    expect(recovery?.stripeRefundId).toBeNull()
 
     expect(mockedRefund).not.toHaveBeenCalled()
     expect(mockedUserMail).not.toHaveBeenCalled()
-
     expect(mockedAdminMail).toHaveBeenCalledOnce()
     expect(mockedAdminMail).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -567,7 +525,7 @@ describe("POST /api/stripe/webhook", () => {
     )
   })
 
-  it("after successful refund: REFUNDED invoices are stamped with stripeRefundId", async () => {
+  it("after successful refund: RefundRecovery is stamped with stripeRefundId", async () => {
     const buyer = await createUser({ email: "stamp@test.local" })
     const owner = await createUser()
     const taken = await createArtwork({ price: 100, ownerId: owner.id })
@@ -585,29 +543,23 @@ describe("POST /api/stripe/webhook", () => {
 
     await POST(makeRequest())
 
-    const invoice = await prisma.invoice.findFirst({ where: { stripeSessionId: sessionId } })
-    expect(invoice?.status).toBe("REFUNDED")
-    expect(invoice?.stripeRefundId).toBe("re_test_stamp")
+    const recovery = await prisma.refundRecovery.findFirst({ where: { stripeSessionId: sessionId } })
+    expect(recovery?.stripeRefundId).toBe("re_test_stamp")
   })
 
-  it("recovery: REFUNDED invoices with null stripeRefundId trigger refund retry on webhook replay", async () => {
+  it("recovery: RefundRecovery with null stripeRefundId triggers refund retry on webhook replay", async () => {
     const buyer = await createUser({ email: "recover@test.local" })
     const owner = await createUser()
     const taken = await createArtwork({ title: "Aube", price: 100, ownerId: owner.id })
     const sessionId = "cs_test_recovery"
 
-    // Simulate a previous crash: REFUNDED invoice exists in DB but
-    // stripeRefundId is null (refund never confirmed).
-    await prisma.invoice.create({
-      data: {
-        buyerId: buyer.id,
-        artworkId: taken.id,
-        amount: 100,
-        status: "REFUNDED",
-        stripeSessionId: sessionId,
-        stripePaymentIntentId: "pi_test_recovery",
-        stripeRefundId: null,
-      },
+    // Simulate a previous crash: recovery row exists but refund never confirmed.
+    await createRefundRecovery({
+      buyerId: buyer.id,
+      artworkId: taken.id,
+      stripeSessionId: sessionId,
+      amount: 100,
+      stripeRefundId: null,
     })
 
     mockedVerify.mockResolvedValue(
@@ -629,31 +581,26 @@ describe("POST /api/stripe/webhook", () => {
       { idempotencyKey: `refund-${sessionId}` }
     )
 
-    const invoice = await prisma.invoice.findFirst({ where: { stripeSessionId: sessionId } })
-    expect(invoice?.stripeRefundId).toBe("re_recovered")
+    const recovery = await prisma.refundRecovery.findFirst({ where: { stripeSessionId: sessionId } })
+    expect(recovery?.stripeRefundId).toBe("re_recovered")
 
-    // Recovery skips emails to avoid spam if they were already sent before the
-    // crash. Stripe's own refund receipt + recovery log are the fallback.
+    // Recovery skips emails to avoid spam if they were already sent before the crash.
     expect(mockedUserMail).not.toHaveBeenCalled()
     expect(mockedAdminMail).not.toHaveBeenCalled()
   })
 
-  it("fully processed (REFUNDED + stripeRefundId set): webhook replay does nothing", async () => {
+  it("fully processed (RefundRecovery already stamped): webhook replay does nothing", async () => {
     const buyer = await createUser()
     const owner = await createUser()
     const taken = await createArtwork({ price: 100, ownerId: owner.id })
     const sessionId = "cs_test_already_settled"
 
-    await prisma.invoice.create({
-      data: {
-        buyerId: buyer.id,
-        artworkId: taken.id,
-        amount: 100,
-        status: "REFUNDED",
-        stripeSessionId: sessionId,
-        stripePaymentIntentId: "pi_test_settled",
-        stripeRefundId: "re_settled",
-      },
+    await createRefundRecovery({
+      buyerId: buyer.id,
+      artworkId: taken.id,
+      stripeSessionId: sessionId,
+      amount: 100,
+      stripeRefundId: "re_settled",
     })
 
     mockedVerify.mockResolvedValue(
@@ -693,7 +640,7 @@ describe("POST /api/stripe/webhook", () => {
     expect(mockedAdminMail).not.toHaveBeenCalled()
   })
 
-  it("attaches billing + shipping address FK and snapshot to the PAID invoice", async () => {
+  it("attaches billing + shipping FK and snapshot to the sale invoice", async () => {
     const buyer = await createUser()
     const billing = await createAddress({
       userId: buyer.id,
@@ -738,10 +685,7 @@ describe("POST /api/stripe/webhook", () => {
     const res = await POST(makeRequest())
     expect(res.status).toBe(200)
 
-    const invoice = await prisma.invoice.findFirst({
-      where: { stripeSessionId: sessionId },
-    })
-    expect(invoice?.status).toBe("PAID")
+    const invoice = await saleInvoice(sessionId)
     expect(invoice?.billingAddressId).toBe(billing.id)
     expect(invoice?.billingStreet).toBe("10 avenue Foch")
     expect(invoice?.billingPostalCode).toBe("75116")
@@ -799,9 +743,7 @@ describe("POST /api/stripe/webhook", () => {
     const res = await POST(makeRequest())
     expect(res.status).toBe(200)
 
-    const invoice = await prisma.invoice.findFirst({
-      where: { stripeSessionId: sessionId },
-    })
+    const invoice = await saleInvoice(sessionId)
     expect(invoice?.billingAddressId).toBeNull()
     expect(invoice?.billingStreet).toBe("10 avenue Foch")
     expect(invoice?.billingCity).toBe("Paris")
@@ -809,7 +751,7 @@ describe("POST /api/stripe/webhook", () => {
     expect(invoice?.shippingStreet).toBe(shipping.street)
   })
 
-  it("backward compat: when metadata has no address blobs, invoice address fields stay null (no crash)", async () => {
+  it("when metadata has no address blobs, invoice address fields stay null (no crash)", async () => {
     const buyer = await createUser()
     const artwork = await createArtwork({ price: 100 })
     await createBasketWithItem({ userId: buyer.id, artworkId: artwork.id })
@@ -820,24 +762,20 @@ describe("POST /api/stripe/webhook", () => {
         sessionId,
         userId: buyer.id,
         artworkIds: [artwork.id],
-        // no billingAddress / shippingAddress (session created before B11)
       })
     )
 
     const res = await POST(makeRequest())
     expect(res.status).toBe(200)
 
-    const invoice = await prisma.invoice.findFirst({
-      where: { stripeSessionId: sessionId },
-    })
-    expect(invoice?.status).toBe("PAID")
+    const invoice = await saleInvoice(sessionId)
     expect(invoice?.billingAddressId).toBeNull()
     expect(invoice?.billingStreet).toBeNull()
     expect(invoice?.shippingAddressId).toBeNull()
     expect(invoice?.shippingStreet).toBeNull()
   })
 
-  it("multi-item: all PAID invoices in the order carry the same address FK + snapshot", async () => {
+  it("multi-item order: the single invoice carries the address + all line items", async () => {
     const buyer = await createUser()
     const billing = await createAddress({ userId: buyer.id, city: "Bordeaux" })
     const shipping = await createAddress({ userId: buyer.id, city: "Nice" })
@@ -876,13 +814,11 @@ describe("POST /api/stripe/webhook", () => {
     const res = await POST(makeRequest())
     expect(res.status).toBe(200)
 
-    const invoices = await prisma.invoice.findMany({
-      where: { stripeSessionId: sessionId },
-    })
-    expect(invoices).toHaveLength(2)
-    expect(invoices.every((i) => i.billingAddressId === billing.id)).toBe(true)
-    expect(invoices.every((i) => i.billingCity === "Bordeaux")).toBe(true)
-    expect(invoices.every((i) => i.shippingAddressId === shipping.id)).toBe(true)
-    expect(invoices.every((i) => i.shippingCity === "Nice")).toBe(true)
+    const invoice = await saleInvoice(sessionId)
+    expect(invoice?.lineItems).toHaveLength(2)
+    expect(invoice?.billingAddressId).toBe(billing.id)
+    expect(invoice?.billingCity).toBe("Bordeaux")
+    expect(invoice?.shippingAddressId).toBe(shipping.id)
+    expect(invoice?.shippingCity).toBe("Nice")
   })
 })

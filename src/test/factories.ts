@@ -1,5 +1,6 @@
 import { prisma } from "@/src/lib/prisma"
 import { randomUUID } from "node:crypto"
+import { FRANCHISE_VAT_MENTION } from "@/src/lib/invoice/sellerConfig"
 
 export async function createUser(overrides: Partial<{ email: string; role: "ADMIN" | "CLIENT" }> = {}) {
   return prisma.user.create({
@@ -22,19 +23,63 @@ export async function createArtwork(
   })
 }
 
-export async function createPendingInvoice(args: {
+// Crée une facture de vente (SALE) + ses line items. Snapshot vendeur/TVA = valeurs
+// de test (franchise). Numéro unique pour ne pas violer la contrainte @@unique.
+export async function createSaleInvoice(args: {
+  buyerId: string
+  items: { artworkId: string; unitPriceHT?: number; label?: string }[]
+  stripeSessionId?: string | null
+  number?: string
+}) {
+  const lineItems = args.items.map((it) => {
+    const unitPriceHT = it.unitPriceHT ?? 100
+    return {
+      artworkId: it.artworkId,
+      label: it.label ?? "Œuvre de test",
+      unitPriceHT,
+      quantity: 1,
+      vatRate: 0,
+      vatAmount: 0,
+      lineTTC: unitPriceHT,
+    }
+  })
+  const totalHT = lineItems.reduce((s, l) => s + Number(l.unitPriceHT), 0)
+  return prisma.invoice.create({
+    data: {
+      type: "SALE",
+      number: args.number ?? `INV-TEST-${randomUUID().slice(0, 8)}`,
+      saleDate: new Date(),
+      buyerId: args.buyerId,
+      stripeSessionId: args.stripeSessionId ?? null,
+      sellerName: "Galerie Test",
+      sellerLegalForm: "Entreprise individuelle",
+      sellerAddress: "1 rue de Test, 75001 Paris",
+      sellerSiret: "12345678901234",
+      vatRegime: "FRANCHISE",
+      legalMention: FRANCHISE_VAT_MENTION,
+      totalHT,
+      totalVat: 0,
+      totalTTC: totalHT,
+      lineItems: { create: lineItems },
+    },
+    include: { lineItems: true },
+  })
+}
+
+export async function createRefundRecovery(args: {
   buyerId: string
   artworkId: string
+  stripeSessionId: string
   amount?: number
-  stripeSessionId?: string | null
+  stripeRefundId?: string | null
 }) {
-  return prisma.invoice.create({
+  return prisma.refundRecovery.create({
     data: {
       buyerId: args.buyerId,
       artworkId: args.artworkId,
+      stripeSessionId: args.stripeSessionId,
       amount: args.amount ?? 100,
-      status: "PENDING",
-      stripeSessionId: args.stripeSessionId ?? null,
+      stripeRefundId: args.stripeRefundId ?? null,
     },
   })
 }

@@ -6,6 +6,7 @@ import Stripe from "stripe"
 import { Prisma } from "@prisma/client"
 import { sendRefundUserMail } from "@/src/lib/mail/refundUserMail"
 import { sendIncidentAdminMail } from "@/src/lib/mail/incidentAdminMail"
+import { emitSaleInvoice, type SoldItem } from "@/src/lib/invoice/emitSaleInvoice"
 
 type RefundFailure = {
   artworkId: string
@@ -112,14 +113,13 @@ async function handleRefunds(args: {
     })
   }
 
-  // Mark the invoices as refunded in DB. This must happen AFTER the Stripe
-  // refund succeeds so that "REFUNDED in DB without stripeRefundId" is a
-  // reliable signal that we crashed and need to retry.
+  // Stamp the recovery markers. This must happen AFTER the Stripe refund
+  // succeeds so that "RefundRecovery without stripeRefundId" is a reliable
+  // signal that we crashed and need to retry.
   if (refundOutcome === "issued" && stripeRefundId) {
-    await prisma.invoice.updateMany({
+    await prisma.refundRecovery.updateMany({
       where: {
         stripeSessionId: sessionId,
-        status: "REFUNDED",
         stripeRefundId: null,
       },
       data: { stripeRefundId },
@@ -218,47 +218,36 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ received: true })
       }
 
-      // Smart idempotence: check if invoices already exist for this session.
-      // - If they exist and all REFUNDED ones have stripeRefundId → fully
-      //   processed, return 200.
-      // - If they exist but some REFUNDED ones have stripeRefundId === null →
-      //   crash recovery: the original webhook committed the DB transaction
-      //   but did not finish the Stripe refund. Replay the refund (Stripe
-      //   dedupes via idempotency key).
-      const existingInvoices = await prisma.invoice.findMany({
+      // Smart idempotence: a processed session has either a SALE invoice and/or
+      // RefundRecovery rows.
+      // - Already processed (invoice present and no pending recovery) → 200.
+      // - RefundRecovery without stripeRefundId → crash recovery: the DB
+      //   transaction committed but the Stripe refund never finished. Replay it
+      //   (Stripe dedupes via the idempotency key).
+      const existingInvoice = await prisma.invoice.findFirst({
+        where: { type: "SALE", stripeSessionId: session.id },
+        select: { id: true },
+      })
+      const existingRecoveries = await prisma.refundRecovery.findMany({
         where: { stripeSessionId: session.id },
-        select: {
-          artworkId: true,
-          amount: true,
-          status: true,
-          stripeRefundId: true,
-        },
+        include: { artwork: { select: { title: true } } },
       })
 
-      if (existingInvoices.length > 0) {
-        const pendingRefunds = existingInvoices.filter(
-          (i) => i.status === "REFUNDED" && !i.stripeRefundId
-        )
-        if (pendingRefunds.length === 0) {
+      if (existingInvoice || existingRecoveries.length > 0) {
+        const pendingRecoveries = existingRecoveries.filter((r) => !r.stripeRefundId)
+        if (pendingRecoveries.length === 0) {
           return NextResponse.json({ received: true })
         }
 
-        console.warn("[webhook] recovery: REFUNDED invoices without stripeRefundId, replaying refund", {
+        console.warn("[webhook] recovery: RefundRecovery without stripeRefundId, replaying refund", {
           sessionId: session.id,
-          count: pendingRefunds.length,
+          count: pendingRecoveries.length,
         })
 
-        // Lazy fetch artwork titles (only needed on the rare recovery path).
-        const artworks = await prisma.artwork.findMany({
-          where: { id: { in: pendingRefunds.map((p) => p.artworkId) } },
-          select: { id: true, title: true },
-        })
-        const titleById = new Map(artworks.map((a) => [a.id, a.title]))
-
-        const recoveryFailures: RefundFailure[] = pendingRefunds.map((inv) => ({
-          artworkId: inv.artworkId,
-          artworkTitle: titleById.get(inv.artworkId) ?? "(titre indisponible)",
-          amountCents: Math.round(Number(inv.amount) * 100),
+        const recoveryFailures: RefundFailure[] = pendingRecoveries.map((rec) => ({
+          artworkId: rec.artworkId,
+          artworkTitle: rec.artwork.title,
+          amountCents: Math.round(Number(rec.amount) * 100),
         }))
 
         await handleRefunds({
@@ -294,6 +283,8 @@ export async function POST(request: NextRequest) {
 
       try {
         await prisma.$transaction(async (tx) => {
+          const soldItems: SoldItem[] = []
+
           for (const artworkId of artworkIds) {
             const artwork = await tx.artwork.findUnique({ where: { id: artworkId } })
             if (!artwork) continue
@@ -303,36 +294,54 @@ export async function POST(request: NextRequest) {
               data: { ownerId: userId },
             })
 
-            const status = transferred.count > 0 ? "PAID" : "REFUNDED"
-
-            await tx.invoice.create({
-              data: {
-                buyerId: userId,
+            if (transferred.count > 0) {
+              // Vendue → ligne de facture.
+              soldItems.push({
                 artworkId,
-                amount: artwork.price,
-                status,
-                stripeSessionId: session.id,
-                stripePaymentIntentId: paymentIntentId,
-                billingAddressId: billingAddressFk,
-                billingStreet: billingAddress?.street ?? null,
-                billingPostalCode: billingAddress?.postalCode ?? null,
-                billingCity: billingAddress?.city ?? null,
-                billingCountry: billingAddress?.country ?? null,
-                shippingAddressId: shippingAddressFk,
-                shippingStreet: shippingAddress?.street ?? null,
-                shippingPostalCode: shippingAddress?.postalCode ?? null,
-                shippingCity: shippingAddress?.city ?? null,
-                shippingCountry: shippingAddress?.country ?? null,
-              },
-            })
-
-            if (status === "REFUNDED") {
+                label: artwork.title,
+                unitPriceHT: artwork.price,
+              })
+            } else {
+              // Déjà vendue (race) : pas de vente → marqueur de récupération + remboursement.
+              await tx.refundRecovery.create({
+                data: {
+                  stripeSessionId: session.id,
+                  buyerId: userId,
+                  artworkId,
+                  amount: artwork.price,
+                },
+              })
               failures.push({
                 artworkId,
                 artworkTitle: artwork.title,
                 amountCents: Math.round(Number(artwork.price) * 100),
               })
             }
+          }
+
+          // Une seule facture pour la commande, uniquement si au moins une œuvre vendue.
+          if (soldItems.length > 0) {
+            await emitSaleInvoice(tx, {
+              buyerId: userId,
+              stripeSessionId: session.id,
+              stripePaymentIntentId: paymentIntentId,
+              soldItems,
+              saleDate: new Date(),
+              billing: {
+                fk: billingAddressFk,
+                street: billingAddress?.street ?? null,
+                postalCode: billingAddress?.postalCode ?? null,
+                city: billingAddress?.city ?? null,
+                country: billingAddress?.country ?? null,
+              },
+              shipping: {
+                fk: shippingAddressFk,
+                street: shippingAddress?.street ?? null,
+                postalCode: shippingAddress?.postalCode ?? null,
+                city: shippingAddress?.city ?? null,
+                country: shippingAddress?.country ?? null,
+              },
+            })
           }
 
           const basket = await tx.basket.findUnique({ where: { userId } })
@@ -358,16 +367,9 @@ export async function POST(request: NextRequest) {
         failures,
         isRecovery: false,
       })
-    } else if (event.type === "checkout.session.expired") {
-      const session = event.data.object as Stripe.Checkout.Session
-
-      await prisma.invoice.deleteMany({
-        where: {
-          stripeSessionId: session.id,
-          status: "PENDING",
-        },
-      })
     }
+    // checkout.session.expired : rien à faire — aucune facture/recovery n'est
+    // créée avant la confirmation de paiement (plus de brouillon PENDING).
 
     return NextResponse.json({ received: true })
   } catch (error) {

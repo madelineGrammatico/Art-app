@@ -4,14 +4,9 @@ vi.mock("@/src/lib/auth/auth", () => ({
   auth: vi.fn(),
 }))
 
-import {
-  getUserInvoiceAction,
-  getInvoiceAction,
-  updateInvoiceAction,
-} from "./invoice.action"
+import { getUserInvoiceAction, getInvoiceAction } from "./invoice.action"
 import { auth } from "@/src/lib/auth/auth"
-import { prisma } from "@/src/lib/prisma"
-import { createUser, createArtwork, createPendingInvoice } from "@/src/test/factories"
+import { createUser, createArtwork, createSaleInvoice } from "@/src/test/factories"
 import { sessionFor } from "@/src/test/auth-mock"
 
 const mockedAuth = vi.mocked(auth)
@@ -19,6 +14,11 @@ const mockedAuth = vi.mocked(auth)
 beforeEach(() => {
   mockedAuth.mockReset()
 })
+
+async function saleInvoiceFor(buyerId: string) {
+  const artwork = await createArtwork()
+  return createSaleInvoice({ buyerId, items: [{ artworkId: artwork.id }] })
+}
 
 describe("getUserInvoiceAction", () => {
   it("rejects unauthenticated requests", async () => {
@@ -48,8 +48,7 @@ describe("getUserInvoiceAction", () => {
 
   it("allows a CLIENT to read their own invoices", async () => {
     const buyer = await createUser()
-    const artwork = await createArtwork()
-    await createPendingInvoice({ buyerId: buyer.id, artworkId: artwork.id })
+    await saleInvoiceFor(buyer.id)
     mockedAuth.mockResolvedValue(sessionFor({ id: buyer.id }) as never)
 
     const res = await getUserInvoiceAction(buyer.id)
@@ -62,8 +61,7 @@ describe("getUserInvoiceAction", () => {
   it("allows an ADMIN to read another user's invoices", async () => {
     const admin = await createUser({ role: "ADMIN" })
     const target = await createUser()
-    const artwork = await createArtwork()
-    await createPendingInvoice({ buyerId: target.id, artworkId: artwork.id })
+    await saleInvoiceFor(target.id)
     mockedAuth.mockResolvedValue(sessionFor({ id: admin.id, role: "ADMIN" }) as never)
 
     const res = await getUserInvoiceAction(target.id)
@@ -93,8 +91,7 @@ describe("getInvoiceAction", () => {
   it("rejects a CLIENT trying to read another user's invoice", async () => {
     const buyer = await createUser()
     const stranger = await createUser()
-    const artwork = await createArtwork()
-    const invoice = await createPendingInvoice({ buyerId: buyer.id, artworkId: artwork.id })
+    const invoice = await saleInvoiceFor(buyer.id)
     mockedAuth.mockResolvedValue(sessionFor({ id: stranger.id }) as never)
 
     const res = await getInvoiceAction(invoice.id)
@@ -102,62 +99,26 @@ describe("getInvoiceAction", () => {
     expect((res as { error: string }).error).toBe("non authorisé")
   })
 
-  it("allows the buyer to read their own invoice", async () => {
+  it("allows the buyer to read their own invoice (with line items)", async () => {
     const buyer = await createUser()
-    const artwork = await createArtwork()
-    const invoice = await createPendingInvoice({ buyerId: buyer.id, artworkId: artwork.id })
+    const invoice = await saleInvoiceFor(buyer.id)
     mockedAuth.mockResolvedValue(sessionFor({ id: buyer.id }) as never)
 
     const res = await getInvoiceAction(invoice.id)
 
     expect((res as { id: string; buyerId: string }).id).toBe(invoice.id)
     expect((res as { id: string; buyerId: string }).buyerId).toBe(buyer.id)
+    expect((res as { lineItems: unknown[] }).lineItems.length).toBe(1)
   })
 
   it("allows an ADMIN to read any invoice", async () => {
     const admin = await createUser({ role: "ADMIN" })
     const buyer = await createUser()
-    const artwork = await createArtwork()
-    const invoice = await createPendingInvoice({ buyerId: buyer.id, artworkId: artwork.id })
+    const invoice = await saleInvoiceFor(buyer.id)
     mockedAuth.mockResolvedValue(sessionFor({ id: admin.id, role: "ADMIN" }) as never)
 
     const res = await getInvoiceAction(invoice.id)
 
     expect((res as { id: string }).id).toBe(invoice.id)
-  })
-})
-
-describe("updateInvoiceAction", () => {
-  it("rejects unauthenticated requests", async () => {
-    mockedAuth.mockResolvedValue(null as never)
-    const res = await updateInvoiceAction("any-invoice", "PAID")
-    expect((res as { error: string }).error).toBe("non authorisé")
-  })
-
-  it("rejects a CLIENT (even on their own invoice)", async () => {
-    const buyer = await createUser()
-    const artwork = await createArtwork()
-    const invoice = await createPendingInvoice({ buyerId: buyer.id, artworkId: artwork.id })
-    mockedAuth.mockResolvedValue(sessionFor({ id: buyer.id }) as never)
-
-    const res = await updateInvoiceAction(invoice.id, "PAID")
-
-    expect((res as { error: string }).error).toBe("non authorisé")
-    const unchanged = await prisma.invoice.findUnique({ where: { id: invoice.id } })
-    expect(unchanged?.status).toBe("PENDING")
-  })
-
-  it("allows an ADMIN to update an invoice's status", async () => {
-    const admin = await createUser({ role: "ADMIN" })
-    const buyer = await createUser()
-    const artwork = await createArtwork()
-    const invoice = await createPendingInvoice({ buyerId: buyer.id, artworkId: artwork.id })
-    mockedAuth.mockResolvedValue(sessionFor({ id: admin.id, role: "ADMIN" }) as never)
-
-    const res = await updateInvoiceAction(invoice.id, "PAID")
-
-    expect((res as { id: string; status: string }).status).toBe("PAID")
-    const stored = await prisma.invoice.findUnique({ where: { id: invoice.id } })
-    expect(stored?.status).toBe("PAID")
   })
 })

@@ -4,7 +4,11 @@ Contrats figés pour écrire les tests, puis l'implémentation. Découle des use
 ([B13-invoice-user-stories.md](B13-invoice-user-stories.md)) et du flux Stripe réel
 ([webhook/route.ts](../app/api/stripe/webhook/route.ts)).
 
-> Statut : **validée** — toutes les décisions sont tranchées (✅). Prête pour l'écriture des tests.
+> Statut : **validée** — toutes les décisions sont tranchées (✅).
+>
+> **Implémenté (EPIC 0/1)** : modèle `Invoice`/`InvoiceLineItem`/`RefundRecovery` + `Counter` ; `sellerConfig` (parse/validation) ; `numbering` (gapless + concurrent) ; `emitSaleInvoice` ; webhook réécrit (1 facture multi-lignes + `RefundRecovery` pour le cas race) ; `by-session` + page success + `invoice.action` + `certificate.action` adaptés ; `updateInvoiceAction` supprimée (immuabilité). Tests verts.
+>
+> **Reste à faire** : EPIC 3 (PDF + email facture), EPIC 5 (avoir `emitCreditNote` + flux remboursement après-vente), câblage de la **validation config au boot** (US0.1), et l'**UI admin** de remboursement.
 
 ---
 

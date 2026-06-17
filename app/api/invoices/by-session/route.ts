@@ -14,28 +14,45 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "sessionId manquant" }, { status: 400 })
     }
 
-    const invoices = await prisma.invoice.findMany({
+    // Facture de vente de la commande (ses line items = œuvres réellement achetées).
+    const invoice = await prisma.invoice.findFirst({
       where: {
         buyerId: session.user.id,
+        type: "SALE",
         stripeSessionId: sessionId,
-        status: { in: ["PAID", "REFUNDED"] },
       },
-      include: { artwork: true },
-      orderBy: { createdAt: "desc" },
+      include: { lineItems: { include: { artwork: true } } },
     })
 
-    const invoicesWithNumberPrice = invoices.map((invoice) => ({
-      id: invoice.id,
-      amount: Number(invoice.amount),
-      status: invoice.status,
+    // Œuvres remboursées au checkout (race) : pas de facture, mais à afficher.
+    const refunded = await prisma.refundRecovery.findMany({
+      where: { buyerId: session.user.id, stripeSessionId: sessionId },
+      include: { artwork: true },
+    })
+
+    const paidItems = (invoice?.lineItems ?? []).map((line) => ({
+      id: line.id,
+      amount: Number(line.lineTTC),
+      status: "PAID" as const,
       artwork: {
-        id: invoice.artwork.id,
-        title: invoice.artwork.title,
-        price: Number(invoice.artwork.price),
+        id: line.artwork.id,
+        title: line.artwork.title,
+        price: Number(line.artwork.price),
       },
     }))
 
-    return NextResponse.json({ invoices: invoicesWithNumberPrice })
+    const refundedItems = refunded.map((rec) => ({
+      id: rec.id,
+      amount: Number(rec.amount),
+      status: "REFUNDED" as const,
+      artwork: {
+        id: rec.artwork.id,
+        title: rec.artwork.title,
+        price: Number(rec.artwork.price),
+      },
+    }))
+
+    return NextResponse.json({ invoices: [...paidItems, ...refundedItems] })
   } catch (error) {
     console.error("Error fetching invoices by session:", error)
     return NextResponse.json(
