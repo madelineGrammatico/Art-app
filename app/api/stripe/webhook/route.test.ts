@@ -17,6 +17,9 @@ vi.mock("@/src/lib/mail/refundUserMail", () => ({
 vi.mock("@/src/lib/mail/incidentAdminMail", () => ({
   sendIncidentAdminMail: vi.fn(),
 }))
+vi.mock("@/src/lib/mail/invoiceUserMail", () => ({
+  sendInvoiceUserMail: vi.fn(),
+}))
 // Config vendeur fixe (franchise) pour que emitSaleInvoice ne dépende pas de l'env.
 vi.mock("@/src/lib/invoice/sellerConfig", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/src/lib/invoice/sellerConfig")>()
@@ -41,6 +44,7 @@ import { verifyWebhookSignature } from "@/src/lib/stripe/webhook-handler"
 import { stripe } from "@/src/lib/stripe/stripe"
 import { sendRefundUserMail } from "@/src/lib/mail/refundUserMail"
 import { sendIncidentAdminMail } from "@/src/lib/mail/incidentAdminMail"
+import { sendInvoiceUserMail } from "@/src/lib/mail/invoiceUserMail"
 import { prisma } from "@/src/lib/prisma"
 import {
   createUser,
@@ -54,6 +58,7 @@ const mockedVerify = vi.mocked(verifyWebhookSignature)
 const mockedRefund = vi.mocked(stripe.refunds.create)
 const mockedUserMail = vi.mocked(sendRefundUserMail)
 const mockedAdminMail = vi.mocked(sendIncidentAdminMail)
+const mockedInvoiceMail = vi.mocked(sendInvoiceUserMail)
 
 type AddressBlob = {
   id: string
@@ -137,6 +142,8 @@ beforeEach(() => {
   mockedUserMail.mockResolvedValue({ ok: true, id: "msg_user" })
   mockedAdminMail.mockReset()
   mockedAdminMail.mockResolvedValue({ ok: true, id: "msg_admin" })
+  mockedInvoiceMail.mockReset()
+  mockedInvoiceMail.mockResolvedValue({ ok: true, id: "msg_invoice" })
 })
 
 describe("POST /api/stripe/webhook", () => {
@@ -203,6 +210,7 @@ describe("POST /api/stripe/webhook", () => {
     expect(basketItems).toHaveLength(0)
 
     expect(mockedRefund).not.toHaveBeenCalled()
+    expect(mockedInvoiceMail).toHaveBeenCalledOnce()
   })
 
   it("is idempotent: replaying the same event does not duplicate the invoice", async () => {
@@ -226,6 +234,7 @@ describe("POST /api/stripe/webhook", () => {
     expect(res.status).toBe(200)
     const invoices = await prisma.invoice.findMany({ where: { stripeSessionId: sessionId } })
     expect(invoices).toHaveLength(1)
+    expect(mockedInvoiceMail).toHaveBeenCalledOnce()
   })
 
   it("full race: artwork already owned → no invoice, RefundRecovery, Stripe refund + emails", async () => {
@@ -249,6 +258,7 @@ describe("POST /api/stripe/webhook", () => {
     expect(res.status).toBe(200)
 
     expect(await saleInvoice(sessionId)).toBeNull()
+    expect(mockedInvoiceMail).not.toHaveBeenCalled()
     const recoveries = await prisma.refundRecovery.findMany({ where: { stripeSessionId: sessionId } })
     expect(recoveries).toHaveLength(1)
     expect(recoveries[0].artworkId).toBe(artwork.id)
@@ -620,7 +630,7 @@ describe("POST /api/stripe/webhook", () => {
     expect(mockedAdminMail).not.toHaveBeenCalled()
   })
 
-  it("happy path does NOT send any email", async () => {
+  it("happy path: sends the invoice email but no refund/incident email", async () => {
     const buyer = await createUser({ email: "happy@test.local" })
     const artwork = await createArtwork({ price: 80 })
     await createBasketWithItem({ userId: buyer.id, artworkId: artwork.id })
@@ -636,6 +646,10 @@ describe("POST /api/stripe/webhook", () => {
 
     await POST(makeRequest())
 
+    expect(mockedInvoiceMail).toHaveBeenCalledOnce()
+    expect(mockedInvoiceMail).toHaveBeenCalledWith(
+      expect.objectContaining({ to: "happy@test.local" })
+    )
     expect(mockedUserMail).not.toHaveBeenCalled()
     expect(mockedAdminMail).not.toHaveBeenCalled()
   })

@@ -6,7 +6,9 @@ import Stripe from "stripe"
 import { Prisma } from "@prisma/client"
 import { sendRefundUserMail } from "@/src/lib/mail/refundUserMail"
 import { sendIncidentAdminMail } from "@/src/lib/mail/incidentAdminMail"
+import { sendInvoiceUserMail } from "@/src/lib/mail/invoiceUserMail"
 import { emitSaleInvoice, type SoldItem } from "@/src/lib/invoice/emitSaleInvoice"
+import { invoiceViewModel } from "@/src/lib/invoice/invoiceViewModel"
 
 type RefundFailure = {
   artworkId: string
@@ -281,9 +283,11 @@ export async function POST(request: NextRequest) {
       const shippingAddressFk =
         shippingAddress && stillExistingIds.has(shippingAddress.id) ? shippingAddress.id : null
 
+      let emittedInvoice: Awaited<ReturnType<typeof emitSaleInvoice>> | null = null
       try {
-        await prisma.$transaction(async (tx) => {
+        emittedInvoice = await prisma.$transaction(async (tx) => {
           const soldItems: SoldItem[] = []
+          let invoice: Awaited<ReturnType<typeof emitSaleInvoice>> | null = null
 
           for (const artworkId of artworkIds) {
             const artwork = await tx.artwork.findUnique({ where: { id: artworkId } })
@@ -326,7 +330,7 @@ export async function POST(request: NextRequest) {
               user.name ||
               user.email ||
               "Client"
-            await emitSaleInvoice(tx, {
+            invoice = await emitSaleInvoice(tx, {
               buyerId: userId,
               buyerName,
               stripeSessionId: session.id,
@@ -354,6 +358,8 @@ export async function POST(request: NextRequest) {
           if (basket) {
             await tx.basketItem.deleteMany({ where: { basketId: basket.id } })
           }
+
+          return invoice
         })
       } catch (err) {
         if (
@@ -373,6 +379,28 @@ export async function POST(request: NextRequest) {
         failures,
         isRecovery: false,
       })
+
+      // Email facture au client (une seule fois : les replays court-circuitent
+      // avant la transaction via existingInvoice). Remplace l'intérim reçu Stripe.
+      if (emittedInvoice && user.email) {
+        try {
+          const mailRes = await sendInvoiceUserMail({
+            to: user.email,
+            invoice: invoiceViewModel(emittedInvoice),
+          })
+          if (!mailRes.ok) {
+            console.error("[webhook] invoice email failed", {
+              sessionId: session.id,
+              error: mailRes.error,
+            })
+          }
+        } catch (err) {
+          console.error("[webhook] invoice email threw", {
+            sessionId: session.id,
+            error: err instanceof Error ? err.message : err,
+          })
+        }
+      }
     }
     // checkout.session.expired : rien à faire — aucune facture/recovery n'est
     // créée avant la confirmation de paiement (plus de brouillon PENDING).

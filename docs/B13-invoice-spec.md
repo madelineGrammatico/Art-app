@@ -6,9 +6,9 @@ Contrats figés pour écrire les tests, puis l'implémentation. Découle des use
 
 > Statut : **validée** — toutes les décisions sont tranchées (✅).
 >
-> **Implémenté (EPIC 0/1 + fondation EPIC 3)** : modèle `Invoice`/`InvoiceLineItem`/`RefundRecovery` + `Counter` ; `sellerConfig` (parse/validation) ; `numbering` (gapless + concurrent) ; `emitSaleInvoice` ; webhook réécrit (1 facture multi-lignes + `RefundRecovery` pour le cas race) ; `by-session` + page success + `invoice.action` + `certificate.action` adaptés ; `updateInvoiceAction` supprimée (immuabilité) ; **snapshot `buyerName`** (identité acheteur figée) ; **`invoiceViewModel`** portant toutes les mentions obligatoires (testé). Tests verts.
+> **Implémenté (EPIC 0/1 + EPIC 3 hors PDF)** : modèle `Invoice`/`InvoiceLineItem`/`RefundRecovery` + `Counter` ; `sellerConfig` (parse/validation) ; `numbering` (gapless + concurrent) ; `emitSaleInvoice` ; webhook réécrit (1 facture multi-lignes + `RefundRecovery` pour le cas race) ; `by-session` + page success + `invoice.action` + `certificate.action` adaptés ; `updateInvoiceAction` supprimée (immuabilité) ; **snapshot `buyerName`** ; **`invoiceViewModel`** (mentions obligatoires) ; **email facture client** (`sendInvoiceUserMail`, envoyé une fois à l'émission depuis le webhook — remplace l'intérim reçu Stripe). Tests verts.
 >
-> **Reste à faire** : EPIC 3 **rendu PDF + email** (le view-model est prêt), EPIC 5 (avoir `emitCreditNote` + flux remboursement après-vente), câblage de la **validation config au boot** (US0.1), et l'**UI admin** de remboursement.
+> **Reste à faire** : EPIC 3 **rendu PDF** (à joindre à l'email — view-model prêt), EPIC 5 (avoir `emitCreditNote` + flux remboursement après-vente), câblage de la **validation config au boot** (US0.1), et l'**UI admin** de remboursement.
 
 ---
 

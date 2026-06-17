@@ -30,7 +30,7 @@ Prévu **après** la couverture de tests (déjà en place). Mérite sa propre br
    - ✅ **TVA par ligne** (franchise → mention 293 B ; 5,5 % prêt côté code).
    - ⏳ **Conservation 10 ans** structurée (soft-delete) — reste à faire.
    - ⏳ **PDF** (« support durable », Code conso art. L221-13) — reste à faire.
-6. ⏳ **Email facture client** — reste à faire. Intérim actuel = reçu Stripe natif (`receipt_email`).
+6. ✅ **FAIT** — **Email facture client** (`sendInvoiceUserMail`, envoyé à l'émission depuis le webhook) ; remplace l'intérim reçu Stripe. ⏳ Reste : y **joindre le PDF** quand le rendu sera fait.
 
 **Reste à faire (étape 2) :** PDF + email facture (EPIC 3), facture d'avoir `emitCreditNote` + flux remboursement après-vente (EPIC 5), validation config au boot (US0.1), UI admin de remboursement.
 

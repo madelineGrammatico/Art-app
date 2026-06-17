@@ -1,4 +1,4 @@
-import { Prisma, type Invoice } from "@prisma/client"
+import { Prisma, type Invoice, type InvoiceLineItem } from "@prisma/client"
 import { getSellerConfig } from "./sellerConfig"
 import { nextInvoiceNumber } from "./numbering"
 
@@ -48,7 +48,7 @@ export async function emitSaleInvoice(
     billing?: AddressSnapshot | null
     shipping?: AddressSnapshot | null
   }
-): Promise<Invoice> {
+): Promise<Invoice & { lineItems: InvoiceLineItem[] }> {
   const seller = getSellerConfig()
   const vatRate = new Prisma.Decimal(seller.vatRate)
   const number = await nextInvoiceNumber(tx, "SALE", args.saleDate.getFullYear())
@@ -113,5 +113,6 @@ export async function emitSaleInvoice(
 
       lineItems: { create: lineItems },
     },
+    include: { lineItems: true },
   })
 }
