@@ -22,7 +22,7 @@ Prévu **après** la couverture de tests (déjà en place). Mérite sa propre br
 
 **Évolution du modèle (vraie facture client) — étape 2, reste à faire :**
 
-> Besoins détaillés en user stories (→ tests) : [docs/B13-invoice-user-stories.md](docs/B13-invoice-user-stories.md). Décisions actées : 1 facture/commande en line items, avoir = même modèle `Invoice` (`type = CREDIT_NOTE`), régime TVA en config snapshotée, anti-doublon via `unique(stripeSessionId)` / `unique(stripeRefundId)`.
+> Besoins détaillés en user stories (→ tests) : [docs/B13-invoice-user-stories.md](docs/B13-invoice-user-stories.md). Spec technique (contrats, modèle, numérotation, déclencheurs) : [docs/B13-invoice-spec.md](docs/B13-invoice-spec.md) — **validée, prête pour les tests**. Décisions actées : 1 facture/commande en line items, avoir = même modèle `Invoice` (`type = CREDIT_NOTE`), régime TVA en config snapshotée, anti-doublon via `unique(stripeSessionId)` / `unique(stripeRefundId)`.
 
 5. Passer de `1 invoice / artwork` à **1 facture / commande avec line items**. À prévoir :
    - **Numéro de facture** unique séquentiel (obligation légale, Code de commerce).
@@ -54,3 +54,13 @@ Prévu **après** la couverture de tests (déjà en place). Mérite sa propre br
 **Intégration Stripe :**
 - Shipping comme **`line_item` additionnel** sur la session Checkout (cohérent avec les line items de B13_INVOICE).
 - Alternative `shipping_options` natif Stripe : à évaluer, possiblement trop rigide pour le filtrage spécialistes.
+
+---
+
+## Transverse — Internationalisation (i18n)
+
+Le site est en **français uniquement** aujourd'hui. L'ajout de l'**anglais** est prévu et considéré **nécessaire** (les acheteurs ne sont pas forcément francophones).
+
+**Implications à ne pas oublier :**
+- **Facture / avoir (B13)** : les documents client (PDF + email) devront être **traduisibles**. Les numéros utilisent déjà des préfixes neutres `INV-`/`CN-` (pas `F-`/`A-`) pour cette raison. Les **mentions légales FR** (ex. `art. 293 B du CGI`) restent en français même sur un document traduit (obligation légale française).
+- Prévoir le choix de langue (UI + langue de communication par utilisateur) avant de multiplier les contenus en dur.
