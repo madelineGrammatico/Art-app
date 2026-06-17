@@ -4,6 +4,7 @@ import type { InvoiceViewModel } from "@/src/lib/invoice/invoiceViewModel"
 export type InvoiceUserMailParams = {
   to: string
   invoice: InvoiceViewModel
+  pdf?: Buffer // facture PDF à joindre (support durable)
 }
 
 function escapeHtml(str: string): string {
@@ -75,5 +76,8 @@ export async function sendInvoiceUserMail(
     to: params.to,
     subject: `Votre facture ${params.invoice.number}`,
     html: buildHtml(params.invoice),
+    ...(params.pdf
+      ? { attachments: [{ filename: `facture-${params.invoice.number}.pdf`, content: params.pdf }] }
+      : {}),
   })
 }

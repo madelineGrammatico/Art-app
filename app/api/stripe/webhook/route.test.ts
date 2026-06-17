@@ -20,6 +20,11 @@ vi.mock("@/src/lib/mail/incidentAdminMail", () => ({
 vi.mock("@/src/lib/mail/invoiceUserMail", () => ({
   sendInvoiceUserMail: vi.fn(),
 }))
+// Rendu PDF mocké : on ne veut pas générer un vrai PDF dans les tests du webhook
+// (testé à part dans invoicePdf.test.ts).
+vi.mock("@/src/lib/invoice/invoicePdf", () => ({
+  renderInvoicePdf: vi.fn().mockResolvedValue(Buffer.from("%PDF-fake")),
+}))
 // Config vendeur fixe (franchise) pour que emitSaleInvoice ne dépende pas de l'env.
 vi.mock("@/src/lib/invoice/sellerConfig", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/src/lib/invoice/sellerConfig")>()
@@ -648,7 +653,7 @@ describe("POST /api/stripe/webhook", () => {
 
     expect(mockedInvoiceMail).toHaveBeenCalledOnce()
     expect(mockedInvoiceMail).toHaveBeenCalledWith(
-      expect.objectContaining({ to: "happy@test.local" })
+      expect.objectContaining({ to: "happy@test.local", pdf: expect.any(Buffer) })
     )
     expect(mockedUserMail).not.toHaveBeenCalled()
     expect(mockedAdminMail).not.toHaveBeenCalled()

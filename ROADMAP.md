@@ -29,10 +29,10 @@ Prévu **après** la couverture de tests (déjà en place). Mérite sa propre br
    - ✅ **Snapshot vendeur** (SIRET, raison sociale, régime TVA) figé à l'émission via config.
    - ✅ **TVA par ligne** (franchise → mention 293 B ; 5,5 % prêt côté code).
    - ⏳ **Conservation 10 ans** structurée (soft-delete) — reste à faire.
-   - ⏳ **PDF** (« support durable », Code conso art. L221-13) — reste à faire.
-6. ✅ **FAIT** — **Email facture client** (`sendInvoiceUserMail`, envoyé à l'émission depuis le webhook) ; remplace l'intérim reçu Stripe. ⏳ Reste : y **joindre le PDF** quand le rendu sera fait.
+   - ✅ **PDF** (« support durable », Code conso art. L221-13) — `renderInvoicePdf` (@react-pdf/renderer), joint à l'email.
+6. ✅ **FAIT** — **Email facture client** (`sendInvoiceUserMail`, envoyé à l'émission depuis le webhook, **PDF joint**) ; remplace l'intérim reçu Stripe.
 
-**Reste à faire (étape 2) :** PDF + email facture (EPIC 3), facture d'avoir `emitCreditNote` + flux remboursement après-vente (EPIC 5), validation config au boot (US0.1), UI admin de remboursement.
+**Reste à faire (étape 2) :** facture d'avoir `emitCreditNote` + flux remboursement après-vente (EPIC 5), validation config au boot (US0.1), conservation/soft-delete (US6.2), UI admin de remboursement.
 
 > Notes prod : migration destructive (ancien modèle `Invoice` incompatible — `npm run db:reset` en dev) ; variables d'env **`SELLER_*`** désormais requises pour que le webhook émette les factures (dev + prod, pas `.env.test` car mocké).
 

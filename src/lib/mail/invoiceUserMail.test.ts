@@ -75,6 +75,21 @@ describe("sendInvoiceUserMail", () => {
     expect(html).toContain("263.75 €")
   })
 
+  it("joint le PDF en pièce jointe quand il est fourni", async () => {
+    const pdf = Buffer.from("%PDF-test")
+    await sendInvoiceUserMail({ to: "jean@test.local", invoice: vm, pdf })
+
+    const arg = mockedSend.mock.calls[0][0]
+    expect(arg.attachments).toEqual([
+      { filename: "facture-INV-2026-000001.pdf", content: pdf },
+    ])
+  })
+
+  it("n'ajoute pas de pièce jointe sans PDF", async () => {
+    await sendInvoiceUserMail({ to: "jean@test.local", invoice: vm })
+    expect(mockedSend.mock.calls[0][0].attachments).toBeUndefined()
+  })
+
   it("propage le résultat de sendEmail", async () => {
     mockedSend.mockResolvedValue({ ok: false, error: "boom" })
     const res = await sendInvoiceUserMail({ to: "jean@test.local", invoice: vm })

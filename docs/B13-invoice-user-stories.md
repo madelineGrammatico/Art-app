@@ -7,8 +7,8 @@ Le « pourquoi » et les décisions structurantes sont dans [MEMORY.md](../MEMOR
 > **Étape 2 (ce document)** : passage de `1 invoice / artwork` à **1 facture / commande avec line items**, conforme à la facturation FR.
 
 > **Avancement étape 2** (cf. [B13-invoice-spec.md](B13-invoice-spec.md)) :
-> - ✅ **EPIC 0** config vendeur + snapshot · **EPIC 1** facture de vente, line items, numérotation, snapshot adresses + identité acheteur (`buyerName`) · **EPIC 2** calcul TVA par ligne (franchise / 5,5 %) · **EPIC 3** view-model des mentions (`invoiceViewModel`) + **email facture** (US3.2, `sendInvoiceUserMail`) · **EPIC 4** consultation (`getInvoiceAction`/`getUserInvoiceAction`) · **EPIC 6** immuabilité (pas d'`updateInvoiceAction`).
-> - ⏳ **EPIC 3** rendu PDF (US3.1, à joindre à l'email) · **EPIC 5** facture d'avoir + flux remboursement après-vente · validation config au boot (US0.1) · conservation/soft-delete (US6.2).
+> - ✅ **EPIC 0** config vendeur + snapshot · **EPIC 1** facture de vente, line items, numérotation, snapshot adresses + identité acheteur (`buyerName`) · **EPIC 2** calcul TVA par ligne (franchise / 5,5 %) · **EPIC 3** view-model (`invoiceViewModel`) + **PDF** (`renderInvoicePdf`, US3.1) + **email facture avec PDF joint** (US3.2, `sendInvoiceUserMail`) · **EPIC 4** consultation · **EPIC 6** immuabilité (pas d'`updateInvoiceAction`).
+> - ⏳ **EPIC 5** facture d'avoir + flux remboursement après-vente · validation config au boot (US0.1) · conservation/soft-delete (US6.2).
 
 ---
 

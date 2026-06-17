@@ -9,6 +9,7 @@ import { sendIncidentAdminMail } from "@/src/lib/mail/incidentAdminMail"
 import { sendInvoiceUserMail } from "@/src/lib/mail/invoiceUserMail"
 import { emitSaleInvoice, type SoldItem } from "@/src/lib/invoice/emitSaleInvoice"
 import { invoiceViewModel } from "@/src/lib/invoice/invoiceViewModel"
+import { renderInvoicePdf } from "@/src/lib/invoice/invoicePdf"
 
 type RefundFailure = {
   artworkId: string
@@ -384,9 +385,21 @@ export async function POST(request: NextRequest) {
       // avant la transaction via existingInvoice). Remplace l'intérim reçu Stripe.
       if (emittedInvoice && user.email) {
         try {
+          const vm = invoiceViewModel(emittedInvoice)
+          // PDF best-effort : un échec de rendu ne doit pas priver le client de l'email.
+          let pdf: Buffer | undefined
+          try {
+            pdf = await renderInvoicePdf(vm)
+          } catch (pdfErr) {
+            console.error("[webhook] invoice pdf render failed", {
+              sessionId: session.id,
+              error: pdfErr instanceof Error ? pdfErr.message : pdfErr,
+            })
+          }
           const mailRes = await sendInvoiceUserMail({
             to: user.email,
-            invoice: invoiceViewModel(emittedInvoice),
+            invoice: vm,
+            pdf,
           })
           if (!mailRes.ok) {
             console.error("[webhook] invoice email failed", {
