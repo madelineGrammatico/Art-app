@@ -41,6 +41,21 @@ enum InvoiceStatus {
   REFUNDED
 }
 
+// Type de pièce comptable (B13 étape 2). SALE = facture de vente, CREDIT_NOTE = avoir.
+enum InvoiceType {
+  SALE
+  CREDIT_NOTE
+}
+
+// Compteur séquentiel sans trou pour la numérotation des factures (B13 EPIC 1).
+// Incrémenté DANS la transaction qui crée la facture : un rollback annule
+// l'incrément (pas de trou) — contrairement à une SEQUENCE Postgres.
+// key = "<prefix>:<year>", ex. "INV:2026", "CN:2026".
+model Counter {
+  key   String @id
+  value Int    @default(0)
+}
+
 model Invoice {
   id                    String        @id @default(uuid())
   artworkId             String
