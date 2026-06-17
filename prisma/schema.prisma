@@ -59,8 +59,9 @@ model Invoice {
   issuedAt DateTime    @default(now())
   saleDate DateTime // date de la vente (= paiement) ; pour un avoir = date du remboursement
 
-  buyerId String
-  buyer   User   @relation(fields: [buyerId], references: [id], onDelete: Restrict)
+  buyerId   String
+  buyer     User   @relation(fields: [buyerId], references: [id], onDelete: Restrict)
+  buyerName String // snapshot identité acheteur figée à l'émission (mention légale obligatoire)
 
   // Avoir : pointe la facture créditée (null pour une facture de vente).
   creditedInvoiceId String?

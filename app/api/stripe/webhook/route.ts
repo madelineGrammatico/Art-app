@@ -208,7 +208,7 @@ export async function POST(request: NextRequest) {
 
       const user = await prisma.user.findUnique({
         where: { id: userId },
-        select: { email: true },
+        select: { email: true, name: true, firstName: true, lastName: true },
       })
       if (!user) {
         console.error("[webhook] buyer not found in DB", {
@@ -321,8 +321,14 @@ export async function POST(request: NextRequest) {
 
           // Une seule facture pour la commande, uniquement si au moins une œuvre vendue.
           if (soldItems.length > 0) {
+            const buyerName =
+              [user.firstName, user.lastName].filter(Boolean).join(" ") ||
+              user.name ||
+              user.email ||
+              "Client"
             await emitSaleInvoice(tx, {
               buyerId: userId,
+              buyerName,
               stripeSessionId: session.id,
               stripePaymentIntentId: paymentIntentId,
               soldItems,

@@ -30,6 +30,7 @@ export async function createSaleInvoice(args: {
   items: { artworkId: string; unitPriceHT?: number; label?: string }[]
   stripeSessionId?: string | null
   number?: string
+  buyerName?: string
 }) {
   const lineItems = args.items.map((it) => {
     const unitPriceHT = it.unitPriceHT ?? 100
@@ -50,6 +51,7 @@ export async function createSaleInvoice(args: {
       number: args.number ?? `INV-TEST-${randomUUID().slice(0, 8)}`,
       saleDate: new Date(),
       buyerId: args.buyerId,
+      buyerName: args.buyerName ?? "Client Test",
       stripeSessionId: args.stripeSessionId ?? null,
       sellerName: "Galerie Test",
       sellerLegalForm: "Entreprise individuelle",

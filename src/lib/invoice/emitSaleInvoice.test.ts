@@ -47,6 +47,7 @@ describe("emitSaleInvoice", () => {
 
     const invoice = await emit({
       buyerId: buyer.id,
+      buyerName: "Jean Acheteur",
       stripeSessionId: "cs_emit_1",
       stripePaymentIntentId: "pi_1",
       saleDate: new Date("2026-03-10"),
@@ -75,6 +76,7 @@ describe("emitSaleInvoice", () => {
 
     const invoice = await emit({
       buyerId: buyer.id,
+      buyerName: "Jean Acheteur",
       stripeSessionId: "cs_emit_franchise",
       stripePaymentIntentId: null,
       saleDate: new Date("2026-01-01"),
@@ -97,6 +99,7 @@ describe("emitSaleInvoice", () => {
 
     const invoice = await emit({
       buyerId: buyer.id,
+      buyerName: "Jean Acheteur",
       stripeSessionId: "cs_emit_vat",
       stripePaymentIntentId: null,
       saleDate: new Date("2026-01-01"),
@@ -118,6 +121,7 @@ describe("emitSaleInvoice", () => {
 
     const invoice = await emit({
       buyerId: buyer.id,
+      buyerName: "Jean Acheteur",
       stripeSessionId: "cs_emit_addr",
       stripePaymentIntentId: null,
       saleDate: new Date("2026-01-01"),
@@ -138,6 +142,7 @@ describe("emitSaleInvoice", () => {
 
     await emit({
       buyerId: buyer.id,
+      buyerName: "Jean Acheteur",
       stripeSessionId: "cs_emit_dup",
       stripePaymentIntentId: null,
       saleDate: new Date("2026-01-01"),
@@ -147,6 +152,7 @@ describe("emitSaleInvoice", () => {
     await expect(
       emit({
         buyerId: buyer.id,
+        buyerName: "Jean Acheteur",
         stripeSessionId: "cs_emit_dup",
         stripePaymentIntentId: null,
         saleDate: new Date("2026-01-01"),

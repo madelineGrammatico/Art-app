@@ -40,6 +40,7 @@ export async function emitSaleInvoice(
   tx: Prisma.TransactionClient,
   args: {
     buyerId: string
+    buyerName: string
     stripeSessionId: string
     stripePaymentIntentId: string | null
     soldItems: SoldItem[]
@@ -82,6 +83,7 @@ export async function emitSaleInvoice(
       number,
       saleDate: args.saleDate,
       buyerId: args.buyerId,
+      buyerName: args.buyerName,
       stripeSessionId: args.stripeSessionId,
       stripePaymentIntentId: args.stripePaymentIntentId,
 
