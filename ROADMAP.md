@@ -32,7 +32,9 @@ Prévu **après** la couverture de tests (déjà en place). Mérite sa propre br
    - ✅ **PDF** (« support durable », Code conso art. L221-13) — `renderInvoicePdf` (@react-pdf/renderer), joint à l'email.
 6. ✅ **FAIT** — **Email facture client** (`sendInvoiceUserMail`, envoyé à l'émission depuis le webhook, **PDF joint**) ; remplace l'intérim reçu Stripe.
 
-**Reste à faire (étape 2) :** facture d'avoir `emitCreditNote` + flux remboursement après-vente (EPIC 5), validation config au boot (US0.1), conservation/soft-delete (US6.2), UI admin de remboursement.
+7. ✅ **FAIT (EPIC 5)** — **facture d'avoir** : `emitCreditNote` (avoir = `Invoice type=CREDIT_NOTE`, snapshot copié de l'origine, montants négatifs, série `CN-` gapless) + orchestration **`refundSale`** (remboursement après-vente : garde anti-doublon → `stripe.refunds.create` idempotent → avoir + remise en vente `ownerId: null` → email avoir `sendCreditNoteUserMail`).
+
+**Reste à faire (étape 2) :** wrapper server action + RBAC `refund:invoice` + **UI admin** de remboursement (différés) ; validation config au boot (US0.1) ; conservation/soft-delete (US6.2).
 
 > Notes prod : migration destructive (ancien modèle `Invoice` incompatible — `npm run db:reset` en dev) ; variables d'env **`SELLER_*`** désormais requises pour que le webhook émette les factures (dev + prod, pas `.env.test` car mocké).
 

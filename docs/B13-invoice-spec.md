@@ -6,9 +6,9 @@ Contrats figés pour écrire les tests, puis l'implémentation. Découle des use
 
 > Statut : **validée** — toutes les décisions sont tranchées (✅).
 >
-> **Implémenté (EPIC 0/1/2/3/4 + immuabilité 6)** : modèle `Invoice`/`InvoiceLineItem`/`RefundRecovery` + `Counter` ; `sellerConfig` ; `numbering` (gapless + concurrent) ; `emitSaleInvoice` ; webhook réécrit (1 facture multi-lignes + `RefundRecovery` pour le cas race) ; `by-session` + page success + `invoice.action` + `certificate.action` adaptés ; `updateInvoiceAction` supprimée (immuabilité) ; snapshot `buyerName` ; `invoiceViewModel` (mentions obligatoires) ; **email facture** (`sendInvoiceUserMail`) **avec PDF joint** (`renderInvoicePdf`, @react-pdf/renderer) envoyé une fois à l'émission — remplace l'intérim reçu Stripe. Tests verts.
+> **Implémenté (EPIC 0/1/2/3/4/5 + immuabilité 6)** : modèle `Invoice`/`InvoiceLineItem`/`RefundRecovery` + `Counter` ; `sellerConfig` ; `numbering` (gapless + concurrent) ; `emitSaleInvoice` ; webhook réécrit (1 facture multi-lignes + `RefundRecovery` pour le cas race) ; `by-session` + page success + `invoice.action` + `certificate.action` adaptés ; `updateInvoiceAction` supprimée (immuabilité) ; snapshot `buyerName` ; `invoiceViewModel` (mentions obligatoires) ; **email facture** (`sendInvoiceUserMail`) **avec PDF joint** (`renderInvoicePdf`, @react-pdf/renderer) envoyé une fois à l'émission — remplace l'intérim reçu Stripe. **EPIC 5** : `emitCreditNote` (avoir, snapshot copié de l'origine, montants négatifs, série `CN-` gapless) + orchestration `refundSale` (garde anti-double-remboursement → `stripe.refunds.create` idempotent → transaction `emitCreditNote` + remise en vente `ownerId: null` → email avoir) + `sendCreditNoteUserMail`. Tests verts.
 >
-> **Reste à faire** : EPIC 5 (avoir `emitCreditNote` + flux remboursement après-vente), câblage **validation config au boot** (US0.1), **conservation/soft-delete** (US6.2), **UI admin** de remboursement.
+> **Reste à faire** : wrapper server action + RBAC `refund:invoice` + **UI admin** de remboursement (différés ici) ; câblage **validation config au boot** (US0.1) ; **conservation/soft-delete** (US6.2).
 
 ---
 
@@ -158,8 +158,9 @@ model Counter { key String @id  value Int }   // key = "INV:2026", "CN:2026"
 4. Si 0 transférée → pas de facture.
 5. Email facture (EPIC 3) après commit.
 
-**B. Émission avoir** — flux après-vente **nouveau** (§6) :
-- `emitCreditNote(tx, { originalInvoiceId, items, stripeRefundId, saleDate })` → `Invoice(type: CREDIT_NOTE)`, montants négatifs, `creditedInvoiceId` renseigné, numéro série `A-`.
+**B. Émission avoir** — flux après-vente (§6), ✅ implémenté :
+- `emitCreditNote(tx, { originalInvoiceId, items, stripeRefundId, saleDate })` → `Invoice(type: CREDIT_NOTE)`, montants négatifs, `creditedInvoiceId` renseigné, série `CN-` (gapless). Snapshot (vendeur/acheteur/adresses/régime) **copié de la facture d'origine** (immuabilité), pas relu de la config.
+- Orchestré par `refundSale({ invoiceId, artworkIds? })` : garde anti-double-remboursement → `stripe.refunds.create` (clé idempotence `credit-<invoiceId>-<artworkIds triés>`) → transaction `emitCreditNote` + remise en vente (`ownerId: null` si encore détenue par l'acheteur) → email `sendCreditNoteUserMail`. **Ordre Stripe-d'abord** : l'avoir exige un `stripeRefundId` non-null ; un crash avant la transaction est rejouable (Stripe idempotent + `@@unique(stripeRefundId)`).
 
 **C. Récupération crash (cas race)** : basée sur `RefundRecovery.stripeRefundId === null` (au lieu de l'invoice REFUNDED). Logique de replay identique à aujourd'hui, source changée.
 
@@ -182,7 +183,7 @@ totalHT  = Σ lineHT ; totalVat = Σ vatAmount ; totalTTC = Σ lineTTC
 
 **Constat** : il n'existe aujourd'hui **aucun** flux de remboursement après-vente (le seul remboursement est le cas race au checkout). L'avoir conforme implique donc de **construire ce flux** : déclencheur admin → `stripe.refunds.create` → `emitCreditNote` + (re)mise en vente de l'œuvre (`ownerId: null`) + email.
 
-**Décidé : go.** Toute la conception d'immuabilité en dépend. Périmètre B13 : **modèle + `emitCreditNote` + tests** ; l'**UI admin** de déclenchement est **différée** (le flux reste appelable/testable sans écran).
+**Décidé : go.** Toute la conception d'immuabilité en dépend. Périmètre B13 : **modèle + `emitCreditNote` + `refundSale` + tests** ✅ ; l'**UI admin** de déclenchement et son **wrapper server action + RBAC `refund:invoice`** restent **différés** (le flux reste appelable/testable sans écran).
 
 ---
 
@@ -205,7 +206,12 @@ export function emitSaleInvoice(tx, args: {
 // src/lib/invoice/emitCreditNote.ts
 export function emitCreditNote(tx, args: {
   originalInvoiceId; items: { artworkId }[]; stripeRefundId; saleDate;
-}): Promise<Invoice>
+}): Promise<Invoice & { lineItems }>
+
+// src/lib/invoice/refundSale.ts  (orchestration ; UI admin différée)
+export function refundSale(args: {
+  invoiceId; artworkIds?;   // artworkIds omis ⇒ remboursement total
+}): Promise<Invoice & { lineItems }>   // throw RefundSaleError si invalide / déjà remboursé
 
 // src/lib/invoice/invoiceViewModel.ts
 export function invoiceViewModel(invoice: InvoiceWithLines): InvoiceViewModel

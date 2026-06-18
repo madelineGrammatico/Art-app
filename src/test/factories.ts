@@ -29,8 +29,11 @@ export async function createSaleInvoice(args: {
   buyerId: string
   items: { artworkId: string; unitPriceHT?: number; label?: string }[]
   stripeSessionId?: string | null
+  stripePaymentIntentId?: string | null
   number?: string
   buyerName?: string
+  billing?: { street?: string; postalCode?: string; city?: string; country?: string }
+  shipping?: { street?: string; postalCode?: string; city?: string; country?: string }
 }) {
   const lineItems = args.items.map((it) => {
     const unitPriceHT = it.unitPriceHT ?? 100
@@ -53,12 +56,21 @@ export async function createSaleInvoice(args: {
       buyerId: args.buyerId,
       buyerName: args.buyerName ?? "Client Test",
       stripeSessionId: args.stripeSessionId ?? null,
+      stripePaymentIntentId: args.stripePaymentIntentId ?? null,
       sellerName: "Galerie Test",
       sellerLegalForm: "Entreprise individuelle",
       sellerAddress: "1 rue de Test, 75001 Paris",
       sellerSiret: "12345678901234",
       vatRegime: "FRANCHISE",
       legalMention: FRANCHISE_VAT_MENTION,
+      billingStreet: args.billing?.street ?? null,
+      billingPostalCode: args.billing?.postalCode ?? null,
+      billingCity: args.billing?.city ?? null,
+      billingCountry: args.billing?.country ?? null,
+      shippingStreet: args.shipping?.street ?? null,
+      shippingPostalCode: args.shipping?.postalCode ?? null,
+      shippingCity: args.shipping?.city ?? null,
+      shippingCountry: args.shipping?.country ?? null,
       totalHT,
       totalVat: 0,
       totalTTC: totalHT,
