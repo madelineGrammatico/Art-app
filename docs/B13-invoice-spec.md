@@ -10,7 +10,9 @@ Contrats figés pour écrire les tests, puis l'implémentation. Découle des use
 >
 > **EPIC 5 (suite)** : **server action `refundSaleAction`** (`invoice.action.ts`) — wrapper RBAC `refund:invoice` (ADMIN) autour de `refundSale`, renvoie un résumé sérialisé (pas de Decimal au-delà de la frontière).
 >
-> **Reste à faire** : **UI admin** de remboursement (différée) ; câblage **validation config au boot** (US0.1) ; **conservation/soft-delete** (US6.2).
+> **US0.1 / US6.2** : **validation config au boot** câblée (`instrumentation.ts` → `getSellerConfig()` côté runtime nodejs) ; **soft-delete** (`Invoice.archivedAt` + `archiveInvoiceAction` ADMIN, jamais de hard-delete ; consultation filtrée sur `archivedAt: null`).
+>
+> **Reste à faire** : **UI admin** (déclenchement remboursement + archivage) — différée.
 
 ---
 

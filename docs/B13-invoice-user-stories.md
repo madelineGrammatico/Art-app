@@ -8,7 +8,8 @@ Le « pourquoi » et les décisions structurantes sont dans [MEMORY.md](../MEMOR
 
 > **Avancement étape 2** (cf. [B13-invoice-spec.md](B13-invoice-spec.md)) :
 > - ✅ **EPIC 0** config vendeur + snapshot · **EPIC 1** facture de vente, line items, numérotation, snapshot adresses + identité acheteur (`buyerName`) · **EPIC 2** calcul TVA par ligne (franchise / 5,5 %) · **EPIC 3** view-model (`invoiceViewModel`) + **PDF** (`renderInvoicePdf`, US3.1) + **email facture avec PDF joint** (US3.2, `sendInvoiceUserMail`) · **EPIC 4** consultation · **EPIC 5** avoir (`emitCreditNote`) + flux remboursement après-vente (`refundSale` + email `sendCreditNoteUserMail`) · **EPIC 6** immuabilité (pas d'`updateInvoiceAction`).
-> - ⏳ **Reste** : **UI admin** de remboursement (différée) · validation config au boot (US0.1) · conservation/soft-delete (US6.2).
+> - ✅ **US0.1** validation config au boot (`instrumentation.ts` → `getSellerConfig()`) · **US6.2** soft-delete / conservation (`Invoice.archivedAt` + `archiveInvoiceAction`, jamais de hard-delete).
+> - ⏳ **Reste** : **UI admin** (déclenchement remboursement + archivage) — différée.
 
 ---
 
@@ -52,7 +53,7 @@ Clés d'idempotence (anti-doublon, garanties au niveau schéma) :
 
 ## EPIC 0 — Config & snapshot (le socle)
 
-**US0.1 — Config TVA au boot.** En tant que système, je lis le régime TVA et les mentions vendeur depuis la config (env var) et je **refuse de démarrer** si elles sont absentes/incohérentes.
+**US0.1 — Config TVA au boot.** ✅ (`parseSellerConfig`/`getSellerConfig` + appel au boot via `instrumentation.ts`). En tant que système, je lis le régime TVA et les mentions vendeur depuis la config (env var) et je **refuse de démarrer** si elles sont absentes/incohérentes.
 - AC : config valide (`FRANCHISE`, ou `ASSUJETTIE` + taux) → boot OK.
 - AC : config manquante ou incohérente (ex. `ASSUJETTIE` sans taux) → erreur explicite au démarrage.
 - AC : le taux n'est **jamais** une entrée client.
@@ -142,7 +143,7 @@ Clés d'idempotence (anti-doublon, garanties au niveau schéma) :
 - AC : toute tentative de mutation d'une facture finalisée est rejetée.
 - AC : un `status` léger ne subsiste que pour le **pré-émission** (brouillon non payé, sans numéro), jamais comme mécanisme légal.
 
-**US6.2 — Conservation 10 ans.** Pas de suppression dure (soft delete / archivage).
+**US6.2 — Conservation 10 ans.** ✅ Pas de suppression dure : `Invoice.archivedAt` (soft-delete) + `archiveInvoiceAction` (ADMIN, `delete:invoice`, idempotent) — la pièce sort des vues actives mais reste conservée/accessible. Les vues de consultation excluent les archivées (`archivedAt: null`).
 
 ---
 

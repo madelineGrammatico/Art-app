@@ -105,6 +105,11 @@ model Invoice {
   lineItems InvoiceLineItem[]
   createdAt DateTime          @default(now())
 
+  // Soft-delete / archivage (US6.2) : une facture n'est JAMAIS supprimée en dur
+  // (conservation légale 10 ans). archivedAt non-null = retirée des vues actives,
+  // mais conservée et accessible pour l'obligation de conservation.
+  archivedAt DateTime?
+
   @@unique([type, stripeSessionId]) // 1 facture de vente / session Stripe
   @@unique([stripeRefundId]) // 1 avoir / remboursement Stripe
   @@index([buyerId])

@@ -9,7 +9,8 @@ vi.mock("@/src/lib/invoice/refundSale", () => ({
   refundSale: vi.fn(),
 }))
 
-import { getUserInvoiceAction, getInvoiceAction, refundSaleAction } from "./invoice.action"
+import { getUserInvoiceAction, getInvoiceAction, refundSaleAction, archiveInvoiceAction } from "./invoice.action"
+import { prisma } from "@/src/lib/prisma"
 import { auth } from "@/src/lib/auth/auth"
 import { refundSale } from "@/src/lib/invoice/refundSale"
 import { createUser, createArtwork, createSaleInvoice } from "@/src/test/factories"
@@ -77,6 +78,21 @@ describe("getUserInvoiceAction", () => {
     expect(Array.isArray(res)).toBe(true)
     expect((res as Array<{ buyerId: string }>).length).toBe(1)
     expect((res as Array<{ buyerId: string }>)[0].buyerId).toBe(target.id)
+  })
+
+  it("excludes archived (soft-deleted) invoices from the active list (US6.2)", async () => {
+    const buyer = await createUser()
+    const active = await saleInvoiceFor(buyer.id)
+    const archived = await saleInvoiceFor(buyer.id)
+    await prisma.invoice.update({ where: { id: archived.id }, data: { archivedAt: new Date() } })
+    mockedAuth.mockResolvedValue(sessionFor({ id: buyer.id }) as never)
+
+    const res = await getUserInvoiceAction(buyer.id)
+
+    expect(Array.isArray(res)).toBe(true)
+    const ids = (res as Array<{ id: string }>).map((i) => i.id)
+    expect(ids).toContain(active.id)
+    expect(ids).not.toContain(archived.id)
   })
 })
 
@@ -182,5 +198,66 @@ describe("refundSaleAction", () => {
     const res = await refundSaleAction({ invoiceId: "inv-1" })
 
     expect((res as { error: string }).error).toMatch(/déjà été remboursée/)
+  })
+})
+
+describe("archiveInvoiceAction (soft-delete, US6.2)", () => {
+  it("rejects unauthenticated requests", async () => {
+    mockedAuth.mockResolvedValue(null as never)
+    const res = await archiveInvoiceAction("inv-1")
+    expect((res as { error: string }).error).toBe("non authorisé")
+  })
+
+  it("rejects a CLIENT (no delete:invoice permission)", async () => {
+    const buyer = await createUser()
+    const invoice = await saleInvoiceFor(buyer.id)
+    mockedAuth.mockResolvedValue(sessionFor({ id: buyer.id, role: "CLIENT" }) as never)
+
+    const res = await archiveInvoiceAction(invoice.id)
+
+    expect((res as { error: string }).error).toBe("non authorisé")
+    const after = await prisma.invoice.findUnique({ where: { id: invoice.id } })
+    expect(after?.archivedAt).toBeNull()
+  })
+
+  it("returns an error when the invoice does not exist", async () => {
+    const admin = await createUser({ role: "ADMIN" })
+    mockedAuth.mockResolvedValue(sessionFor({ id: admin.id, role: "ADMIN" }) as never)
+
+    const res = await archiveInvoiceAction("missing-invoice-id")
+
+    expect((res as { error: string }).error).toMatch(/facture non trouvé/)
+  })
+
+  it("ADMIN archives without hard-deleting: sets archivedAt, row persists", async () => {
+    const admin = await createUser({ role: "ADMIN" })
+    const buyer = await createUser()
+    const invoice = await saleInvoiceFor(buyer.id)
+    mockedAuth.mockResolvedValue(sessionFor({ id: admin.id, role: "ADMIN" }) as never)
+
+    const res = await archiveInvoiceAction(invoice.id)
+
+    expect((res as { id: string; archivedAt: string }).id).toBe(invoice.id)
+    expect((res as { archivedAt: string }).archivedAt).toBeTruthy()
+
+    // La pièce existe toujours (conservation), seulement marquée archivée.
+    const after = await prisma.invoice.findUnique({ where: { id: invoice.id } })
+    expect(after).not.toBeNull()
+    expect(after?.archivedAt).not.toBeNull()
+  })
+
+  it("is idempotent: archiving an already-archived invoice keeps the original archivedAt", async () => {
+    const admin = await createUser({ role: "ADMIN" })
+    const buyer = await createUser()
+    const invoice = await saleInvoiceFor(buyer.id)
+    const firstDate = new Date("2026-01-01T00:00:00.000Z")
+    await prisma.invoice.update({ where: { id: invoice.id }, data: { archivedAt: firstDate } })
+    mockedAuth.mockResolvedValue(sessionFor({ id: admin.id, role: "ADMIN" }) as never)
+
+    const res = await archiveInvoiceAction(invoice.id)
+
+    expect((res as { archivedAt: string }).archivedAt).toBe(firstDate.toISOString())
+    const after = await prisma.invoice.findUnique({ where: { id: invoice.id } })
+    expect(after?.archivedAt?.toISOString()).toBe(firstDate.toISOString())
   })
 })
