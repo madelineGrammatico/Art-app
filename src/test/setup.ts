@@ -2,8 +2,11 @@ import { beforeEach, afterAll } from "vitest"
 import { prisma } from "@/src/lib/prisma"
 
 const TABLES = [
+  "Counter",
   "BasketItem",
   "Basket",
+  "RefundRecovery",
+  "InvoiceLineItem",
   "Invoice",
   "Certificate",
   "PostalAddress",

@@ -2,54 +2,30 @@
 
 import { auth } from "@/src/lib/auth/auth"
 import { prisma } from "@/src/lib/prisma"
-import { InvoiceStatus } from "@prisma/client"
+import { hasPermissions } from "@/src/lib/auth/permissions/permissions"
+import { refundSale } from "@/src/lib/invoice/refundSale"
 
 
-export const createInvoiceAction = async(
-    userId: string,
-    artworkId:string
-) => {
-    try{
-        const session = await auth()
-        if (!session || !session.user) throw new Error("non authorisé")
-        const artwork = await prisma.artwork.findUnique({
-            where: {id: artworkId}
-        })
-        if(!artwork) throw new Error("oeuvre non trouvé")
-
-        const invoice = await prisma.invoice.create({
-            data: {
-                artworkId: artwork.id,
-                buyerId: userId,
-                amount: artwork.price,
-                status: "PENDING"
-            }
-        })
-        return invoice
-    } catch(error){
-        return {error: error}
-    }
-}
-
-export const getUserIvoiceAction = async(userId: string) => {
+export const getUserInvoiceAction = async(userId: string) => {
     try {
         const session = await auth()
         if (!session || !session.user) throw new Error("non authorisé")
 
         const user = await prisma.user.findUnique({
             where : {id: userId},
-            include: {invoices: true}
+            include: {invoices: {include: {lineItems: true}}}
         })
         if (!user) throw new Error("Utilisateur non trouvé")
         if (session.user.role !== "ADMIN" && user.id !== session.user.id) throw new Error("non authorisé")
 
         return user.invoices
     } catch(error) {
-       return {error: error}
+        console.error(error)
+        return { error: error instanceof Error ? error.message : "Erreur lors de la récupération des factures" }
     }
 }
 
-export const getIvoiceAction = async(
+export const getInvoiceAction = async(
     invoiceId: string,
 ) => {
     try {
@@ -57,7 +33,8 @@ export const getIvoiceAction = async(
         if (!session || !session.user) throw new Error("non authorisé")
 
         const invoice = await prisma.invoice.findUnique({
-            where : {id: invoiceId}
+            where : {id: invoiceId},
+            include: {lineItems: true}
         })
         if (!invoice) throw new Error("facture non trouvé")
         if (
@@ -67,32 +44,41 @@ export const getIvoiceAction = async(
 
         return invoice
     } catch(error) {
-       return {error: error}
+        console.error(error)
+        return { error: error instanceof Error ? error.message : "Erreur lors de la récupération de la facture" }
     }
 }
 
-export const updateIvoiceAction = async(
-    invoiceId: string,
-    status: InvoiceStatus,
-) => {
+// Pas d'updateInvoiceAction : une facture émise est immuable (B13 EPIC 6).
+// Toute correction passe par une facture d'avoir (CREDIT_NOTE).
+
+// Remboursement après-vente (B13 EPIC 5) : réservé ADMIN (permission refund:invoice).
+// Délègue à refundSale (Stripe + avoir + remise en vente + email). En attendant l'UI
+// admin, c'est le point d'entrée RBAC du flux. artworkIds omis = remboursement total.
+export const refundSaleAction = async (args: {
+    invoiceId: string
+    artworkIds?: string[]
+}) => {
     try {
         const session = await auth()
-        if (
-            !session
-            || !session.user
-            || session.user.role !== "ADMIN"
-        ) throw new Error("non authorisé")
+        if (!session || !session.user) throw new Error("non authorisé")
+        if (!hasPermissions(session.user.role, "refund:invoice")) throw new Error("non authorisé")
 
-        const invoice = await prisma.invoice.update({
-            where : {id: invoiceId},
-            data: {
-               status
-            }
-        })
-        if (!invoice) throw new Error("facture non trouvé")
+        const creditNote = await refundSale(args)
 
-        return invoice
-    } catch(error) {
-       return {error: error}
+        // Sérialisation client : pas de Decimal au-delà de la frontière server action.
+        return {
+            id: creditNote.id,
+            number: creditNote.number,
+            creditedInvoiceId: creditNote.creditedInvoiceId,
+            totalTTC: Number(creditNote.totalTTC),
+        }
+    } catch (error) {
+        console.error(error)
+        return { error: error instanceof Error ? error.message : "Erreur lors du remboursement" }
     }
 }
+
+// Pas d'action de suppression/archivage de facture : conservation légale 10 ans
+// (US6.2). Une facture émise reste en base, point. Toute « correction » passe par
+// un avoir (refundSaleAction), jamais par un retrait de la pièce.

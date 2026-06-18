@@ -23,6 +23,8 @@ Elle gère **tous** les commits, branches, push et PR elle-même.
 
 → Quand le travail est fini : signaler simplement que c'est prêt (tests verts, build OK, vérifs faites) et **s'arrêter là**. Ne pas proposer spontanément de message de commit, de PR, ni de stratégie de branche. Exception : si elle le demande explicitement, le faire.
 
+→ **Messages de commit : en anglais uniquement** (même si l'échange est en français). S'aligner sur sa nomenclature `Bxx : SUJET : type : description`.
+
 ## Communication technique
 
 **En continu (proactif) — sémantique technique uniquement.**

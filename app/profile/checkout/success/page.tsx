@@ -26,34 +26,54 @@ export default async function CheckoutSuccessPage({ searchParams }: PageProps) {
   const params = await searchParams
   const sessionId = params.session_id
 
-  // Récupérer les invoices traitées récemment (PAID ou REFUNDED, dernières 5 minutes)
+  // Récupérer les achats récents (dernières 5 minutes) : line items des factures
+  // de vente (PAID) + œuvres remboursées au checkout (REFUNDED).
+  const since = new Date(Date.now() - 5 * 60 * 1000)
   const recentInvoices = await prisma.invoice.findMany({
     where: {
       buyerId: userId,
-      status: { in: ["PAID", "REFUNDED"] },
+      type: "SALE",
       ...(sessionId ? { stripeSessionId: sessionId } : {}),
-      createdAt: {
-        gte: new Date(Date.now() - 5 * 60 * 1000)
-      }
+      createdAt: { gte: since },
     },
-    include: {
-      artwork: true
-    },
-    orderBy: {
-      createdAt: "desc"
-    }
+    include: { lineItems: { include: { artwork: true } } },
+    orderBy: { createdAt: "desc" },
   })
 
-  const invoicesWithNumberPrice = recentInvoices.map(invoice => ({
-    id: invoice.id,
-    amount: Number(invoice.amount),
-    status: invoice.status as "PAID" | "REFUNDED",
+  const recentRefunds = await prisma.refundRecovery.findMany({
+    where: {
+      buyerId: userId,
+      ...(sessionId ? { stripeSessionId: sessionId } : {}),
+      createdAt: { gte: since },
+    },
+    include: { artwork: true },
+  })
+
+  const paidItems = recentInvoices.flatMap(invoice =>
+    invoice.lineItems.map(line => ({
+      id: line.id,
+      amount: Number(line.lineTTC),
+      status: "PAID" as const,
+      artwork: {
+        id: line.artwork.id,
+        title: line.artwork.title,
+        price: Number(line.artwork.price),
+      },
+    }))
+  )
+
+  const refundedItems = recentRefunds.map(rec => ({
+    id: rec.id,
+    amount: Number(rec.amount),
+    status: "REFUNDED" as const,
     artwork: {
-      id: invoice.artwork.id,
-      title: invoice.artwork.title,
-      price: Number(invoice.artwork.price),
+      id: rec.artwork.id,
+      title: rec.artwork.title,
+      price: Number(rec.artwork.price),
     },
   }))
+
+  const invoicesWithNumberPrice = [...paidItems, ...refundedItems]
 
   const hasAnyInvoice = invoicesWithNumberPrice.length > 0
   const allPaid = hasAnyInvoice && invoicesWithNumberPrice.every(i => i.status === "PAID")

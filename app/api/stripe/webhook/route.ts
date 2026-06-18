@@ -6,6 +6,10 @@ import Stripe from "stripe"
 import { Prisma } from "@prisma/client"
 import { sendRefundUserMail } from "@/src/lib/mail/refundUserMail"
 import { sendIncidentAdminMail } from "@/src/lib/mail/incidentAdminMail"
+import { sendInvoiceUserMail } from "@/src/lib/mail/invoiceUserMail"
+import { emitSaleInvoice, type SoldItem } from "@/src/lib/invoice/emitSaleInvoice"
+import { invoiceViewModel } from "@/src/lib/invoice/invoiceViewModel"
+import { renderInvoicePdf } from "@/src/lib/invoice/invoicePdf"
 
 type RefundFailure = {
   artworkId: string
@@ -112,14 +116,13 @@ async function handleRefunds(args: {
     })
   }
 
-  // Mark the invoices as refunded in DB. This must happen AFTER the Stripe
-  // refund succeeds so that "REFUNDED in DB without stripeRefundId" is a
-  // reliable signal that we crashed and need to retry.
+  // Stamp the recovery markers. This must happen AFTER the Stripe refund
+  // succeeds so that "RefundRecovery without stripeRefundId" is a reliable
+  // signal that we crashed and need to retry.
   if (refundOutcome === "issued" && stripeRefundId) {
-    await prisma.invoice.updateMany({
+    await prisma.refundRecovery.updateMany({
       where: {
         stripeSessionId: sessionId,
-        status: "REFUNDED",
         stripeRefundId: null,
       },
       data: { stripeRefundId },
@@ -176,6 +179,43 @@ async function handleRefunds(args: {
   }
 }
 
+// Envoie l'email facture (PDF joint) puis pose emailSentAt — marqueur d'idempotence :
+// tant qu'il est null, l'envoi n'est pas confirmé et sera rejoué au prochain passage du
+// webhook (crash entre le commit DB et l'envoi). Best-effort : un échec n'est pas stampé.
+async function sendInvoiceEmail(
+  invoice: Awaited<ReturnType<typeof emitSaleInvoice>>,
+  email: string,
+  sessionId: string
+) {
+  try {
+    const vm = invoiceViewModel(invoice)
+    // PDF best-effort : un échec de rendu ne doit pas priver le client de l'email.
+    let pdf: Buffer | undefined
+    try {
+      pdf = await renderInvoicePdf(vm)
+    } catch (pdfErr) {
+      console.error("[webhook] invoice pdf render failed", {
+        sessionId,
+        error: pdfErr instanceof Error ? pdfErr.message : pdfErr,
+      })
+    }
+    const mailRes = await sendInvoiceUserMail({ to: email, invoice: vm, pdf })
+    if (mailRes.ok) {
+      await prisma.invoice.update({
+        where: { id: invoice.id },
+        data: { emailSentAt: new Date() },
+      })
+    } else {
+      console.error("[webhook] invoice email failed", { sessionId, error: mailRes.error })
+    }
+  } catch (err) {
+    console.error("[webhook] invoice email threw", {
+      sessionId,
+      error: err instanceof Error ? err.message : err,
+    })
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.text()
@@ -208,7 +248,7 @@ export async function POST(request: NextRequest) {
 
       const user = await prisma.user.findUnique({
         where: { id: userId },
-        select: { email: true },
+        select: { email: true, name: true, firstName: true, lastName: true },
       })
       if (!user) {
         console.error("[webhook] buyer not found in DB", {
@@ -218,47 +258,47 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ received: true })
       }
 
-      // Smart idempotence: check if invoices already exist for this session.
-      // - If they exist and all REFUNDED ones have stripeRefundId → fully
-      //   processed, return 200.
-      // - If they exist but some REFUNDED ones have stripeRefundId === null →
-      //   crash recovery: the original webhook committed the DB transaction
-      //   but did not finish the Stripe refund. Replay the refund (Stripe
-      //   dedupes via idempotency key).
-      const existingInvoices = await prisma.invoice.findMany({
+      // Smart idempotence: a processed session has either a SALE invoice and/or
+      // RefundRecovery rows.
+      // - Already processed (invoice present and no pending recovery) → 200.
+      // - RefundRecovery without stripeRefundId → crash recovery: the DB
+      //   transaction committed but the Stripe refund never finished. Replay it
+      //   (Stripe dedupes via the idempotency key).
+      const existingInvoice = await prisma.invoice.findFirst({
+        where: { type: "SALE", stripeSessionId: session.id },
+        select: { id: true, emailSentAt: true },
+      })
+      const existingRecoveries = await prisma.refundRecovery.findMany({
         where: { stripeSessionId: session.id },
-        select: {
-          artworkId: true,
-          amount: true,
-          status: true,
-          stripeRefundId: true,
-        },
+        include: { artwork: { select: { title: true } } },
       })
 
-      if (existingInvoices.length > 0) {
-        const pendingRefunds = existingInvoices.filter(
-          (i) => i.status === "REFUNDED" && !i.stripeRefundId
-        )
-        if (pendingRefunds.length === 0) {
+      if (existingInvoice || existingRecoveries.length > 0) {
+        const pendingRecoveries = existingRecoveries.filter((r) => !r.stripeRefundId)
+
+        // Rejeu de l'email facture : la pièce existe mais l'envoi n'a jamais été confirmé
+        // (crash après commit, avant l'email). emailSentAt empêche le doublon.
+        if (existingInvoice && !existingInvoice.emailSentAt && user.email) {
+          const full = await prisma.invoice.findUnique({
+            where: { id: existingInvoice.id },
+            include: { lineItems: true },
+          })
+          if (full) await sendInvoiceEmail(full, user.email, session.id)
+        }
+
+        if (pendingRecoveries.length === 0) {
           return NextResponse.json({ received: true })
         }
 
-        console.warn("[webhook] recovery: REFUNDED invoices without stripeRefundId, replaying refund", {
+        console.warn("[webhook] recovery: RefundRecovery without stripeRefundId, replaying refund", {
           sessionId: session.id,
-          count: pendingRefunds.length,
+          count: pendingRecoveries.length,
         })
 
-        // Lazy fetch artwork titles (only needed on the rare recovery path).
-        const artworks = await prisma.artwork.findMany({
-          where: { id: { in: pendingRefunds.map((p) => p.artworkId) } },
-          select: { id: true, title: true },
-        })
-        const titleById = new Map(artworks.map((a) => [a.id, a.title]))
-
-        const recoveryFailures: RefundFailure[] = pendingRefunds.map((inv) => ({
-          artworkId: inv.artworkId,
-          artworkTitle: titleById.get(inv.artworkId) ?? "(titre indisponible)",
-          amountCents: Math.round(Number(inv.amount) * 100),
+        const recoveryFailures: RefundFailure[] = pendingRecoveries.map((rec) => ({
+          artworkId: rec.artworkId,
+          artworkTitle: rec.artwork.title,
+          amountCents: Math.round(Number(rec.amount) * 100),
         }))
 
         await handleRefunds({
@@ -292,8 +332,12 @@ export async function POST(request: NextRequest) {
       const shippingAddressFk =
         shippingAddress && stillExistingIds.has(shippingAddress.id) ? shippingAddress.id : null
 
+      let emittedInvoice: Awaited<ReturnType<typeof emitSaleInvoice>> | null = null
       try {
-        await prisma.$transaction(async (tx) => {
+        emittedInvoice = await prisma.$transaction(async (tx) => {
+          const soldItems: SoldItem[] = []
+          let invoice: Awaited<ReturnType<typeof emitSaleInvoice>> | null = null
+
           for (const artworkId of artworkIds) {
             const artwork = await tx.artwork.findUnique({ where: { id: artworkId } })
             if (!artwork) continue
@@ -303,30 +347,23 @@ export async function POST(request: NextRequest) {
               data: { ownerId: userId },
             })
 
-            const status = transferred.count > 0 ? "PAID" : "REFUNDED"
-
-            await tx.invoice.create({
-              data: {
-                buyerId: userId,
+            if (transferred.count > 0) {
+              // Vendue → ligne de facture.
+              soldItems.push({
                 artworkId,
-                amount: artwork.price,
-                status,
-                stripeSessionId: session.id,
-                stripePaymentIntentId: paymentIntentId,
-                billingAddressId: billingAddressFk,
-                billingStreet: billingAddress?.street ?? null,
-                billingPostalCode: billingAddress?.postalCode ?? null,
-                billingCity: billingAddress?.city ?? null,
-                billingCountry: billingAddress?.country ?? null,
-                shippingAddressId: shippingAddressFk,
-                shippingStreet: shippingAddress?.street ?? null,
-                shippingPostalCode: shippingAddress?.postalCode ?? null,
-                shippingCity: shippingAddress?.city ?? null,
-                shippingCountry: shippingAddress?.country ?? null,
-              },
-            })
-
-            if (status === "REFUNDED") {
+                label: artwork.title,
+                unitPriceHT: artwork.price,
+              })
+            } else {
+              // Déjà vendue (race) : pas de vente → marqueur de récupération + remboursement.
+              await tx.refundRecovery.create({
+                data: {
+                  stripeSessionId: session.id,
+                  buyerId: userId,
+                  artworkId,
+                  amount: artwork.price,
+                },
+              })
               failures.push({
                 artworkId,
                 artworkTitle: artwork.title,
@@ -335,10 +372,43 @@ export async function POST(request: NextRequest) {
             }
           }
 
+          // Une seule facture pour la commande, uniquement si au moins une œuvre vendue.
+          if (soldItems.length > 0) {
+            const buyerName =
+              [user.firstName, user.lastName].filter(Boolean).join(" ") ||
+              user.name ||
+              user.email ||
+              "Client"
+            invoice = await emitSaleInvoice(tx, {
+              buyerId: userId,
+              buyerName,
+              stripeSessionId: session.id,
+              stripePaymentIntentId: paymentIntentId,
+              soldItems,
+              saleDate: new Date(),
+              billing: {
+                fk: billingAddressFk,
+                street: billingAddress?.street ?? null,
+                postalCode: billingAddress?.postalCode ?? null,
+                city: billingAddress?.city ?? null,
+                country: billingAddress?.country ?? null,
+              },
+              shipping: {
+                fk: shippingAddressFk,
+                street: shippingAddress?.street ?? null,
+                postalCode: shippingAddress?.postalCode ?? null,
+                city: shippingAddress?.city ?? null,
+                country: shippingAddress?.country ?? null,
+              },
+            })
+          }
+
           const basket = await tx.basket.findUnique({ where: { userId } })
           if (basket) {
             await tx.basketItem.deleteMany({ where: { basketId: basket.id } })
           }
+
+          return invoice
         })
       } catch (err) {
         if (
@@ -358,16 +428,16 @@ export async function POST(request: NextRequest) {
         failures,
         isRecovery: false,
       })
-    } else if (event.type === "checkout.session.expired") {
-      const session = event.data.object as Stripe.Checkout.Session
 
-      await prisma.invoice.deleteMany({
-        where: {
-          stripeSessionId: session.id,
-          status: "PENDING",
-        },
-      })
+      // Email facture au client. emailSentAt (posé dans sendInvoiceEmail) garantit
+      // l'unicité ; un crash après commit mais avant l'envoi est rejoué au prochain
+      // passage du webhook (cf. branche existingInvoice). Remplace l'intérim reçu Stripe.
+      if (emittedInvoice && user.email) {
+        await sendInvoiceEmail(emittedInvoice, user.email, session.id)
+      }
     }
+    // checkout.session.expired : rien à faire — aucune facture/recovery n'est
+    // créée avant la confirmation de paiement (plus de brouillon PENDING).
 
     return NextResponse.json({ received: true })
   } catch (error) {

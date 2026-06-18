@@ -10,26 +10,38 @@ Raison de l'ordre INVOICE avant SHIPING : une fois `Invoice` structurée en line
 
 ---
 
-## B13_INVOICE — Refacto facturation (`app/api/invoices/route.ts`)
+## B13_INVOICE — Refacto facturation (`app/api/invoices/invoice.action.ts`)
 
 Prévu **après** la couverture de tests (déjà en place). Mérite sa propre branche dédiée.
 
-**Corrections techniques :**
-1. **Trou de permission** dans `createInvoiceAction` (`route.ts:8-32`) : aucun check `userId === session.user.id`, fichier `"use server"`. Sévérité réelle **faible** (fonction sans caller, artwork non transféré car le webhook check `ownerId: null`, invoice sans `stripeSessionId` jamais activée). À traiter quand même → **décider : supprimer la fonction orpheline (préférable) ou ajouter le check.**
-2. **Format d'erreur incohérent** : `route.ts` renvoie `{error: error}` (objet Error), `basket.action.ts` renvoie `{error: error.message}` (string). Aligner sur le pattern basket.
-3. **Code mort** dans `updateIvoiceAction` (`route.ts:92`) : `if (!invoice) throw...` inatteignable (`prisma.update` throw déjà). Supprimer.
-4. **Typos** dans les exports : `getUserIvoiceAction`, `getIvoiceAction`, `updateIvoiceAction` (`Ivoice` → `Invoice`). Renommer.
+**Corrections techniques — ✅ FAIT (étape 1) :**
+1. ✅ **Trou de permission** dans `createInvoiceAction` : **fonction supprimée** (orpheline + aucun check `userId === session.user.id`). Vérifié : en prod les invoices ne sont créées que par le webhook Stripe (`webhook/route.ts`, transaction `ownerId: null`).
+2. ✅ **Format d'erreur** aligné sur le pattern basket : `console.error(error)` + `return { error: error instanceof Error ? error.message : "<fallback fr>" }` (string).
+3. ✅ **Code mort** supprimé (`if (!invoice) throw...` après `prisma.update`).
+4. ✅ **Typos** corrigées : `getUserInvoiceAction`, `getInvoiceAction`, `updateInvoiceAction`. Tests adaptés (`invoice.action.test.ts`).
 
-**Évolution du modèle (vraie facture client) :**
-5. Passer de `1 invoice / artwork` à **1 facture / commande avec line items**. À prévoir :
-   - **Numéro de facture** unique séquentiel (obligation légale, Code de commerce).
-   - **Mentions légales** : SIRET, raison sociale, TVA si applicable.
-   - **Conservation 10 ans** structurée.
-   - **TVA art** : 5,5 % réduite pour œuvres originales en France (vs 20 %) — à modéliser.
-   - **PDF** (« support durable » attendu en cas de litige, Code conso art. L221-13).
-6. **Email facture client** : à faire **dans cette refacto**. Intérim actuel = reçu Stripe natif (`receipt_email`) qui couvre l'obligation légale.
+**Évolution du modèle (vraie facture client) — étape 2, en cours :**
 
-> Les tests dans `app/api/invoices/route.test.ts` devront être adaptés (assertions `res.error.message`).
+> Besoins détaillés en user stories (→ tests) : [docs/B13-invoice-user-stories.md](docs/B13-invoice-user-stories.md). Spec technique (contrats, modèle, numérotation, déclencheurs) : [docs/B13-invoice-spec.md](docs/B13-invoice-spec.md). Décisions actées : 1 facture/commande en line items, avoir = même modèle `Invoice` (`type = CREDIT_NOTE`), régime TVA en config snapshotée, anti-doublon via `unique([type, stripeSessionId])` / `unique(stripeRefundId)`.
+
+5. ✅ **FAIT** — `1 invoice / artwork` → **1 facture / commande avec line items** :
+   - ✅ **Numéro séquentiel** unique sans trou (table `Counter`, séries `INV-`/`CN-` par an).
+   - ✅ **Snapshot vendeur** (SIRET, raison sociale, régime TVA) figé à l'émission via config.
+   - ✅ **TVA par ligne** (franchise → mention 293 B ; 5,5 % prêt côté code).
+   - ✅ **Conservation 10 ans** : aucune suppression de facture (pas d'action de suppression + `onDelete: Restrict` DB) ; pas de soft-delete (aucun cas d'usage de masquage).
+   - ✅ **PDF** (« support durable », Code conso art. L221-13) — `renderInvoicePdf` (@react-pdf/renderer), joint à l'email.
+6. ✅ **FAIT** — **Email facture client** (`sendInvoiceUserMail`, envoyé à l'émission depuis le webhook, **PDF joint**) ; remplace l'intérim reçu Stripe.
+
+7. ✅ **FAIT (EPIC 5)** — **facture d'avoir** : `emitCreditNote` (avoir = `Invoice type=CREDIT_NOTE`, snapshot copié de l'origine, montants négatifs, série `CN-` gapless) + orchestration **`refundSale`** (remboursement après-vente : garde anti-doublon → `stripe.refunds.create` idempotent → avoir + remise en vente `ownerId: null` → email avoir `sendCreditNoteUserMail`).
+
+8. ✅ **FAIT (EPIC 5)** — **server action `refundSaleAction`** : wrapper RBAC (`refund:invoice`, ADMIN) autour de `refundSale`, renvoie un résumé sérialisé.
+9. ✅ **FAIT (US0.1)** — **validation config au boot** : `instrumentation.ts` appelle `getSellerConfig()` au démarrage (runtime nodejs) → l'app échoue tôt si `SELLER_*` absent/incohérent.
+10. ✅ **FAIT (US6.2)** — **conservation 10 ans** : aucune suppression de facture (pas d'action de suppression + `onDelete: Restrict` DB). Pas de soft-delete : aucun cas métier de masquage (erreur → avoir).
+11. ✅ **FAIT (UI admin)** — page `/admin/invoices` : liste ventes + avoirs, remboursement total ou partiel (sélection par œuvre, confirmation en deux temps), gating RBAC.
+
+**B13_INVOICE : terminé** (logique + tests + UI). Prochaine branche : **B14_SHIPING**.
+
+> Notes prod : migration destructive (ancien modèle `Invoice` incompatible — `npm run db:reset` en dev) ; variables d'env **`SELLER_*`** désormais requises pour que le webhook émette les factures (dev + prod, pas `.env.test` car mocké).
 
 ---
 
@@ -51,3 +63,13 @@ Prévu **après** la couverture de tests (déjà en place). Mérite sa propre br
 **Intégration Stripe :**
 - Shipping comme **`line_item` additionnel** sur la session Checkout (cohérent avec les line items de B13_INVOICE).
 - Alternative `shipping_options` natif Stripe : à évaluer, possiblement trop rigide pour le filtrage spécialistes.
+
+---
+
+## Transverse — Internationalisation (i18n)
+
+Le site est en **français uniquement** aujourd'hui. L'ajout de l'**anglais** est prévu et considéré **nécessaire** (les acheteurs ne sont pas forcément francophones).
+
+**Implications à ne pas oublier :**
+- **Facture / avoir (B13)** : les documents client (PDF + email) devront être **traduisibles**. Les numéros utilisent déjà des préfixes neutres `INV-`/`CN-` (pas `F-`/`A-`) pour cette raison. Les **mentions légales FR** (ex. `art. 293 B du CGI`) restent en français même sur un document traduit (obligation légale française).
+- Prévoir le choix de langue (UI + langue de communication par utilisateur) avant de multiplier les contenus en dur.

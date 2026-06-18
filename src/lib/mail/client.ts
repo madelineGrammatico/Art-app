@@ -20,6 +20,7 @@ export type SendEmailParams = {
   subject: string
   html: string
   from?: string
+  attachments?: { filename: string; content: Buffer }[]
 }
 
 export type SendEmailResult =
@@ -34,6 +35,7 @@ export async function sendEmail(params: SendEmailParams): Promise<SendEmailResul
     to: params.to,
     subject: params.subject,
     html: params.html,
+    ...(params.attachments ? { attachments: params.attachments } : {}),
   })
 
   if (result.error) {

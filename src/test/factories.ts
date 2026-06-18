@@ -1,5 +1,6 @@
 import { prisma } from "@/src/lib/prisma"
 import { randomUUID } from "node:crypto"
+import { FRANCHISE_VAT_MENTION } from "@/src/lib/invoice/sellerConfig"
 
 export async function createUser(overrides: Partial<{ email: string; role: "ADMIN" | "CLIENT" }> = {}) {
   return prisma.user.create({
@@ -22,19 +23,77 @@ export async function createArtwork(
   })
 }
 
-export async function createPendingInvoice(args: {
+// Crée une facture de vente (SALE) + ses line items. Snapshot vendeur/TVA = valeurs
+// de test (franchise). Numéro unique pour ne pas violer la contrainte @@unique.
+export async function createSaleInvoice(args: {
+  buyerId: string
+  items: { artworkId: string; unitPriceHT?: number; label?: string }[]
+  stripeSessionId?: string | null
+  stripePaymentIntentId?: string | null
+  number?: string
+  buyerName?: string
+  billing?: { street?: string; postalCode?: string; city?: string; country?: string }
+  shipping?: { street?: string; postalCode?: string; city?: string; country?: string }
+}) {
+  const lineItems = args.items.map((it) => {
+    const unitPriceHT = it.unitPriceHT ?? 100
+    return {
+      artworkId: it.artworkId,
+      label: it.label ?? "Œuvre de test",
+      unitPriceHT,
+      quantity: 1,
+      vatRate: 0,
+      vatAmount: 0,
+      lineTTC: unitPriceHT,
+    }
+  })
+  const totalHT = lineItems.reduce((s, l) => s + Number(l.unitPriceHT), 0)
+  return prisma.invoice.create({
+    data: {
+      type: "SALE",
+      number: args.number ?? `INV-TEST-${randomUUID().slice(0, 8)}`,
+      saleDate: new Date(),
+      buyerId: args.buyerId,
+      buyerName: args.buyerName ?? "Client Test",
+      stripeSessionId: args.stripeSessionId ?? null,
+      stripePaymentIntentId: args.stripePaymentIntentId ?? null,
+      sellerName: "Galerie Test",
+      sellerLegalForm: "Entreprise individuelle",
+      sellerAddress: "1 rue de Test, 75001 Paris",
+      sellerSiret: "12345678901234",
+      vatRegime: "FRANCHISE",
+      legalMention: FRANCHISE_VAT_MENTION,
+      billingStreet: args.billing?.street ?? null,
+      billingPostalCode: args.billing?.postalCode ?? null,
+      billingCity: args.billing?.city ?? null,
+      billingCountry: args.billing?.country ?? null,
+      shippingStreet: args.shipping?.street ?? null,
+      shippingPostalCode: args.shipping?.postalCode ?? null,
+      shippingCity: args.shipping?.city ?? null,
+      shippingCountry: args.shipping?.country ?? null,
+      totalHT,
+      totalVat: 0,
+      totalTTC: totalHT,
+      lineItems: { create: lineItems },
+    },
+    include: { lineItems: true },
+  })
+}
+
+export async function createRefundRecovery(args: {
   buyerId: string
   artworkId: string
+  stripeSessionId: string
   amount?: number
-  stripeSessionId?: string | null
+  stripeRefundId?: string | null
 }) {
-  return prisma.invoice.create({
+  return prisma.refundRecovery.create({
     data: {
       buyerId: args.buyerId,
       artworkId: args.artworkId,
+      stripeSessionId: args.stripeSessionId,
       amount: args.amount ?? 100,
-      status: "PENDING",
-      stripeSessionId: args.stripeSessionId ?? null,
+      stripeRefundId: args.stripeRefundId ?? null,
     },
   })
 }

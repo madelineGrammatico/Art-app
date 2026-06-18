@@ -15,9 +15,10 @@ model Artwork {
   title String
   price Decimal
 
-  ownerId       String?
-  owner         User?        @relation(fields: [ownerId], references: [id])
-  invoice       Invoice[]
+  ownerId          String?
+  owner            User?             @relation(fields: [ownerId], references: [id])
+  invoiceLineItems InvoiceLineItem[]
+  refundRecoveries RefundRecovery[]
   certificateId String?      @unique
   certificate   Certificate?
   basketItems   BasketItem[]
@@ -34,32 +35,54 @@ model Certificate {
   content   String
 }
 
-enum InvoiceStatus {
-  PENDING
-  PAID
-  CANCELLED
-  REFUNDED
+// Type de pièce comptable (B13 étape 2). SALE = facture de vente, CREDIT_NOTE = avoir.
+enum InvoiceType {
+  SALE
+  CREDIT_NOTE
 }
 
+// Compteur séquentiel sans trou pour la numérotation des factures (B13 EPIC 1).
+// Incrémenté DANS la transaction qui crée la facture : un rollback annule
+// l'incrément (pas de trou) — contrairement à une SEQUENCE Postgres.
+// key = "<prefix>:<year>", ex. "INV:2026", "CN:2026".
+model Counter {
+  key   String @id
+  value Int    @default(0)
+}
+
+// Facture (SALE) ou avoir (CREDIT_NOTE). Pièce immuable une fois émise (B13).
+// 1 facture par commande, détaillée en InvoiceLineItem (≠ ancien 1 invoice/artwork).
 model Invoice {
-  id                    String        @id @default(uuid())
-  artworkId             String
-  artwork               Artwork       @relation(fields: [artworkId], references: [id])
-  buyerId               String
-  buyer                 User          @relation(fields: [buyerId], references: [id], onDelete: Restrict)
-  createdAt             DateTime      @default(now())
-  amount                Decimal
-  status                InvoiceStatus
+  id       String      @id @default(uuid())
+  type     InvoiceType @default(SALE)
+  number   String      @unique // séquentiel, attribué à l'émission (cf. numbering.ts)
+  issuedAt DateTime    @default(now())
+  saleDate DateTime // date de la vente (= paiement) ; pour un avoir = date du remboursement
+
+  buyerId   String
+  buyer     User   @relation(fields: [buyerId], references: [id], onDelete: Restrict)
+  buyerName String // snapshot identité acheteur figée à l'émission (mention légale obligatoire)
+
+  // Avoir : pointe la facture créditée (null pour une facture de vente).
+  creditedInvoiceId String?
+  creditedInvoice   Invoice?  @relation("Credits", fields: [creditedInvoiceId], references: [id])
+  creditNotes       Invoice[] @relation("Credits")
+
   stripeSessionId       String?
   stripePaymentIntentId String?
-  // For REFUNDED invoices: id of the Stripe refund. null means the refund
-  // has not been confirmed yet (used as a recovery marker if the webhook
-  // crashed between the DB transaction and the stripe.refunds.create call).
-  stripeRefundId        String?
+  stripeRefundId        String? // renseigné sur l'avoir (1 avoir / remboursement Stripe)
 
-  // Addresses: FK + snapshot. The snapshot is the legal source of truth
-  // (frozen at purchase time); the FK is convenience navigation and is
-  // nulled if the user later deletes the address.
+  // Snapshot vendeur figé à l'émission (source de vérité légale, conservation 10 ans).
+  sellerName      String
+  sellerLegalForm String
+  sellerAddress   String
+  sellerSiret     String
+  sellerRcs       String?
+  sellerVatNumber String?
+  vatRegime       String // "FRANCHISE" | "ASSUJETTIE"
+  legalMention    String? // ex. "TVA non applicable, art. 293 B du CGI"
+
+  // Snapshot adresses acheteur : FK (navigation, null si supprimée) + snapshot (légal, figé).
   billingAddressId  String?
   billingAddress    PostalAddress? @relation("InvoiceBilling", fields: [billingAddressId], references: [id], onDelete: SetNull)
   billingStreet     String?
@@ -74,12 +97,65 @@ model Invoice {
   shippingCity       String?
   shippingCountry    String?
 
-  @@unique([stripeSessionId, artworkId])
+  // Totaux figés (Decimal). Pour un avoir : valeurs négatives.
+  totalHT  Decimal
+  totalVat Decimal
+  totalTTC Decimal
+
+  lineItems InvoiceLineItem[]
+  createdAt DateTime          @default(now())
+
+  // Marqueur d'envoi de l'email facture (support durable). null = email non confirmé
+  // → rejouable si le webhook a crashé entre le commit et l'envoi (cf. webhook/route.ts).
+  emailSentAt DateTime?
+
+  // Conservation 10 ans (US6.2) : aucune suppression dure. Pas de soft-delete dédié
+  // (aucun cas métier de « masquage ») → garanti par l'absence d'action de suppression
+  // + onDelete: Restrict sur InvoiceLineItem.invoice.
+
+  @@unique([type, stripeSessionId]) // 1 facture de vente / session Stripe
+  @@unique([stripeRefundId]) // 1 avoir / remboursement Stripe
   @@index([buyerId])
-  @@index([artworkId])
+  @@index([creditedInvoiceId])
   @@index([stripeSessionId])
   @@index([billingAddressId])
   @@index([shippingAddressId])
+}
+
+// Une ligne de facture = une œuvre vendue (ou créditée sur un avoir).
+model InvoiceLineItem {
+  id          String  @id @default(uuid())
+  invoiceId   String
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  artworkId   String
+  artwork     Artwork @relation(fields: [artworkId], references: [id])
+  label       String // snapshot du titre de l'œuvre à l'émission
+  unitPriceHT Decimal
+  quantity    Int     @default(1)
+  vatRate     Decimal // 0 en franchise, ex. 0.055 en assujetti 5,5 %
+  vatAmount   Decimal
+  lineTTC     Decimal
+
+  @@unique([invoiceId, artworkId])
+  @@index([artworkId])
+}
+
+// Marqueur de récupération pour le remboursement « race au checkout » (œuvre déjà
+// vendue) : aucune vente n'a eu lieu → pas de facture. stripeRefundId null = à rejouer.
+model RefundRecovery {
+  id              String   @id @default(uuid())
+  stripeSessionId String
+  buyerId         String
+  buyer           User     @relation(fields: [buyerId], references: [id], onDelete: Restrict)
+  artworkId       String
+  artwork         Artwork  @relation(fields: [artworkId], references: [id])
+  amount          Decimal
+  stripeRefundId  String? // null = remboursement non confirmé (marqueur de récupération)
+  createdAt       DateTime @default(now())
+
+  @@unique([stripeSessionId, artworkId])
+  @@index([stripeSessionId])
+  @@index([buyerId])
 }
 
 enum UserRole {
@@ -99,6 +175,7 @@ model User {
   role          UserRole  @default(CLIENT)
 
   invoices            Invoice[]
+  refundRecoveries    RefundRecovery[]
   artworks            Artwork[]
   passwordResetTokens PasswordResetToken[]
   accounts            Account[]

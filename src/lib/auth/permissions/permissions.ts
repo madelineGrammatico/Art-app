@@ -18,6 +18,7 @@ const PERMISSIONS = {
         "create:invoice",
         "update:invoice",
         "delete:invoice",
+        "refund:invoice",
 
         "view:purchase",
         "create:purchase",
