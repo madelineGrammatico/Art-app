@@ -5,6 +5,8 @@ import type { InvoiceViewModel } from "./invoiceViewModel"
 // On ne teste pas le contenu du binaire (fragile) — juste que le rendu produit
 // un vrai PDF. Le légal est verrouillé par les tests de invoiceViewModel.
 const vm: InvoiceViewModel = {
+  documentLabel: "Facture",
+  dateLabel: "Vente du",
   number: "INV-2026-000001",
   issuedAt: "2026-03-10",
   saleDate: "2026-03-10",
@@ -40,6 +42,20 @@ describe("renderInvoicePdf", () => {
       legalMention: null,
       vatBreakdown: [{ rate: 0.055, base: 250, amount: 13.75 }],
       totals: { ht: 250, vat: 13.75, ttc: 263.75 },
+    })
+    expect(buf.subarray(0, 5).toString("latin1")).toBe("%PDF-")
+  })
+
+  it("rend un avoir (montants négatifs, ventilation TVA négative)", async () => {
+    const buf = await renderInvoicePdf({
+      ...vm,
+      documentLabel: "Avoir",
+      dateLabel: "Remboursement du",
+      number: "CN-2026-000001",
+      legalMention: null,
+      vatBreakdown: [{ rate: 0.055, base: -250, amount: -13.75 }],
+      totals: { ht: -250, vat: -13.75, ttc: -263.75 },
+      paymentTerms: "Remboursé le 2026-03-10",
     })
     expect(buf.subarray(0, 5).toString("latin1")).toBe("%PDF-")
   })

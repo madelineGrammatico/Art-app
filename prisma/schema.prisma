@@ -105,6 +105,10 @@ model Invoice {
   lineItems InvoiceLineItem[]
   createdAt DateTime          @default(now())
 
+  // Marqueur d'envoi de l'email facture (support durable). null = email non confirmé
+  // → rejouable si le webhook a crashé entre le commit et l'envoi (cf. webhook/route.ts).
+  emailSentAt DateTime?
+
   // Conservation 10 ans (US6.2) : aucune suppression dure. Pas de soft-delete dédié
   // (aucun cas métier de « masquage ») → garanti par l'absence d'action de suppression
   // + onDelete: Restrict sur InvoiceLineItem.invoice.

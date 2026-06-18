@@ -179,6 +179,43 @@ async function handleRefunds(args: {
   }
 }
 
+// Envoie l'email facture (PDF joint) puis pose emailSentAt — marqueur d'idempotence :
+// tant qu'il est null, l'envoi n'est pas confirmé et sera rejoué au prochain passage du
+// webhook (crash entre le commit DB et l'envoi). Best-effort : un échec n'est pas stampé.
+async function sendInvoiceEmail(
+  invoice: Awaited<ReturnType<typeof emitSaleInvoice>>,
+  email: string,
+  sessionId: string
+) {
+  try {
+    const vm = invoiceViewModel(invoice)
+    // PDF best-effort : un échec de rendu ne doit pas priver le client de l'email.
+    let pdf: Buffer | undefined
+    try {
+      pdf = await renderInvoicePdf(vm)
+    } catch (pdfErr) {
+      console.error("[webhook] invoice pdf render failed", {
+        sessionId,
+        error: pdfErr instanceof Error ? pdfErr.message : pdfErr,
+      })
+    }
+    const mailRes = await sendInvoiceUserMail({ to: email, invoice: vm, pdf })
+    if (mailRes.ok) {
+      await prisma.invoice.update({
+        where: { id: invoice.id },
+        data: { emailSentAt: new Date() },
+      })
+    } else {
+      console.error("[webhook] invoice email failed", { sessionId, error: mailRes.error })
+    }
+  } catch (err) {
+    console.error("[webhook] invoice email threw", {
+      sessionId,
+      error: err instanceof Error ? err.message : err,
+    })
+  }
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.text()
@@ -229,7 +266,7 @@ export async function POST(request: NextRequest) {
       //   (Stripe dedupes via the idempotency key).
       const existingInvoice = await prisma.invoice.findFirst({
         where: { type: "SALE", stripeSessionId: session.id },
-        select: { id: true },
+        select: { id: true, emailSentAt: true },
       })
       const existingRecoveries = await prisma.refundRecovery.findMany({
         where: { stripeSessionId: session.id },
@@ -238,6 +275,17 @@ export async function POST(request: NextRequest) {
 
       if (existingInvoice || existingRecoveries.length > 0) {
         const pendingRecoveries = existingRecoveries.filter((r) => !r.stripeRefundId)
+
+        // Rejeu de l'email facture : la pièce existe mais l'envoi n'a jamais été confirmé
+        // (crash après commit, avant l'email). emailSentAt empêche le doublon.
+        if (existingInvoice && !existingInvoice.emailSentAt && user.email) {
+          const full = await prisma.invoice.findUnique({
+            where: { id: existingInvoice.id },
+            include: { lineItems: true },
+          })
+          if (full) await sendInvoiceEmail(full, user.email, session.id)
+        }
+
         if (pendingRecoveries.length === 0) {
           return NextResponse.json({ received: true })
         }
@@ -381,38 +429,11 @@ export async function POST(request: NextRequest) {
         isRecovery: false,
       })
 
-      // Email facture au client (une seule fois : les replays court-circuitent
-      // avant la transaction via existingInvoice). Remplace l'intérim reçu Stripe.
+      // Email facture au client. emailSentAt (posé dans sendInvoiceEmail) garantit
+      // l'unicité ; un crash après commit mais avant l'envoi est rejoué au prochain
+      // passage du webhook (cf. branche existingInvoice). Remplace l'intérim reçu Stripe.
       if (emittedInvoice && user.email) {
-        try {
-          const vm = invoiceViewModel(emittedInvoice)
-          // PDF best-effort : un échec de rendu ne doit pas priver le client de l'email.
-          let pdf: Buffer | undefined
-          try {
-            pdf = await renderInvoicePdf(vm)
-          } catch (pdfErr) {
-            console.error("[webhook] invoice pdf render failed", {
-              sessionId: session.id,
-              error: pdfErr instanceof Error ? pdfErr.message : pdfErr,
-            })
-          }
-          const mailRes = await sendInvoiceUserMail({
-            to: user.email,
-            invoice: vm,
-            pdf,
-          })
-          if (!mailRes.ok) {
-            console.error("[webhook] invoice email failed", {
-              sessionId: session.id,
-              error: mailRes.error,
-            })
-          }
-        } catch (err) {
-          console.error("[webhook] invoice email threw", {
-            sessionId: session.id,
-            error: err instanceof Error ? err.message : err,
-          })
-        }
+        await sendInvoiceEmail(emittedInvoice, user.email, session.id)
       }
     }
     // checkout.session.expired : rien à faire — aucune facture/recovery n'est

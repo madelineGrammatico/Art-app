@@ -1,5 +1,6 @@
 import { Prisma, type Invoice, type InvoiceLineItem } from "@prisma/client"
 import { nextInvoiceNumber } from "./numbering"
+import { parisYear } from "./invoiceViewModel"
 
 /**
  * Émet une facture d'avoir (CREDIT_NOTE) créditant une facture de vente, DANS la
@@ -57,7 +58,7 @@ export async function emitCreditNote(
   const totalVat = creditLines.reduce((acc, l) => acc.plus(l.vatAmount), zero)
   const totalTTC = creditLines.reduce((acc, l) => acc.plus(l.lineTTC), zero)
 
-  const number = await nextInvoiceNumber(tx, "CREDIT_NOTE", args.saleDate.getFullYear())
+  const number = await nextInvoiceNumber(tx, "CREDIT_NOTE", parisYear(args.saleDate))
 
   return tx.invoice.create({
     data: {

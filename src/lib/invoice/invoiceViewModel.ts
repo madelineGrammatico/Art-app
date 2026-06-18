@@ -5,6 +5,7 @@ import { Prisma } from "@prisma/client"
 type DecimalLike = Prisma.Decimal | number | string
 
 export type InvoiceForView = {
+  type: "SALE" | "CREDIT_NOTE"
   number: string
   issuedAt: Date
   saleDate: Date
@@ -43,6 +44,8 @@ export type InvoiceForView = {
 }
 
 export type InvoiceViewModel = {
+  documentLabel: string // "Facture" (vente) | "Avoir" (CREDIT_NOTE)
+  dateLabel: string // "Vente du" | "Remboursement du"
   number: string
   issuedAt: string
   saleDate: string
@@ -74,7 +77,27 @@ export type InvoiceViewModel = {
 }
 
 const n = (d: DecimalLike): number => Number(d)
-const formatDate = (d: Date): string => d.toISOString().slice(0, 10) // YYYY-MM-DD
+
+// Dates des pièces comptables projetées sur le fuseau légal français (Europe/Paris),
+// pas sur UTC : une vente passée juste après minuit à Paris doit afficher la bonne date
+// (et l'année de numérotation, cf. parisYear, doit coïncider avec la date affichée).
+const PARIS_PARTS = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Europe/Paris",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+})
+const formatDate = (d: Date): string => {
+  const p = Object.fromEntries(PARIS_PARTS.formatToParts(d).map((x) => [x.type, x.value]))
+  return `${p.year}-${p.month}-${p.day}` // YYYY-MM-DD, heure de Paris
+}
+
+/** Année civile (Europe/Paris) d'une date — pour la série de numérotation des factures. */
+export function parisYear(d: Date): number {
+  return Number(
+    new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Paris", year: "numeric" }).format(d)
+  )
+}
 
 function formatAddress(
   street: string | null,
@@ -111,7 +134,11 @@ export function invoiceViewModel(invoice: InvoiceForView): InvoiceViewModel {
     byRate.set(l.vatRate, entry)
   }
 
+  const isCreditNote = invoice.type === "CREDIT_NOTE"
+
   return {
+    documentLabel: isCreditNote ? "Avoir" : "Facture",
+    dateLabel: isCreditNote ? "Remboursement du" : "Vente du",
     number: invoice.number,
     issuedAt: formatDate(invoice.issuedAt),
     saleDate: formatDate(invoice.saleDate),
@@ -146,6 +173,8 @@ export function invoiceViewModel(invoice: InvoiceForView): InvoiceViewModel {
       ttc: n(invoice.totalTTC),
     },
     legalMention: invoice.legalMention,
-    paymentTerms: `Payé comptant le ${formatDate(invoice.saleDate)}`,
+    paymentTerms: isCreditNote
+      ? `Remboursé le ${formatDate(invoice.saleDate)}`
+      : `Payé comptant le ${formatDate(invoice.saleDate)}`,
   }
 }

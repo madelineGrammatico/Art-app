@@ -59,7 +59,7 @@ describe("refundSale", () => {
     expect(mockedRefund).toHaveBeenCalledOnce()
     expect(mockedRefund).toHaveBeenCalledWith(
       { payment_intent: "pi_test", amount: 25000 },
-      { idempotencyKey: `credit-${sale.id}-${artwork.id}` }
+      { idempotencyKey: expect.stringMatching(new RegExp(`^credit-${sale.id}-[0-9a-f]{16}$`)) }
     )
 
     // Email avoir (montant présenté en positif).
@@ -101,7 +101,7 @@ describe("refundSale", () => {
 
     expect(mockedRefund).toHaveBeenCalledWith(
       { payment_intent: "pi_partial", amount: 10000 },
-      { idempotencyKey: `credit-${sale.id}-${a1.id}` }
+      { idempotencyKey: expect.stringMatching(new RegExp(`^credit-${sale.id}-[0-9a-f]{16}$`)) }
     )
   })
 
@@ -168,5 +168,49 @@ describe("refundSale", () => {
     expect(credit.type).toBe("CREDIT_NOTE")
     // L'avoir est bien émis, mais la propriété actuelle n'est pas écrasée.
     expect((await prisma.artwork.findUnique({ where: { id: artwork.id } }))?.ownerId).toBe(newOwner.id)
+  })
+
+  it("déduplique les artworkIds (pas de double débit ni d'insert en conflit)", async () => {
+    const { artwork, sale } = await soldArtwork({ price: 100 })
+
+    const credit = await refundSale({ invoiceId: sale.id, artworkIds: [artwork.id, artwork.id] })
+
+    // Une seule ligne créditée, montant simple (pas doublé).
+    const lines = await prisma.invoiceLineItem.findMany({ where: { invoiceId: credit.id } })
+    expect(lines).toHaveLength(1)
+    expect(Number(credit.totalTTC)).toBe(-100)
+    expect(mockedRefund).toHaveBeenCalledWith(
+      expect.objectContaining({ amount: 10000 }),
+      expect.anything()
+    )
+  })
+
+  it("rejette un artworkIds vide explicite (jamais un remboursement total accidentel)", async () => {
+    const { sale } = await soldArtwork()
+
+    await expect(refundSale({ invoiceId: sale.id, artworkIds: [] })).rejects.toBeInstanceOf(
+      RefundSaleError
+    )
+    expect(mockedRefund).not.toHaveBeenCalled()
+  })
+
+  it("borne la clé d'idempotence Stripe (≤ 255 car.) même avec beaucoup d'œuvres", async () => {
+    const buyer = await createUser()
+    const arts = await Promise.all(
+      Array.from({ length: 6 }, () => createArtwork({ price: 100, ownerId: buyer.id }))
+    )
+    const sale = await createSaleInvoice({
+      buyerId: buyer.id,
+      stripePaymentIntentId: "pi_many",
+      items: arts.map((a) => ({ artworkId: a.id, unitPriceHT: 100 })),
+    })
+
+    await refundSale({ invoiceId: sale.id })
+
+    const [, options] = mockedRefund.mock.calls[0] as unknown as [
+      unknown,
+      { idempotencyKey: string },
+    ]
+    expect(options.idempotencyKey.length).toBeLessThanOrEqual(255)
   })
 })

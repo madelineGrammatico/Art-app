@@ -36,7 +36,7 @@ const eur = (n: number) => `${n.toFixed(2)} €`
 
 function InvoicePdf({ vm }: { vm: InvoiceViewModel }) {
   return (
-    <Document title={`Facture ${vm.number}`}>
+    <Document title={`${vm.documentLabel} ${vm.number}`}>
       <Page size="A4" style={styles.page}>
         {/* En-tête : vendeur + facture */}
         <View style={[styles.spaceBetween, styles.block]}>
@@ -51,10 +51,10 @@ function InvoicePdf({ vm }: { vm: InvoiceViewModel }) {
             ) : null}
           </View>
           <View style={{ textAlign: "right" }}>
-            <Text style={styles.h1}>Facture</Text>
+            <Text style={styles.h1}>{vm.documentLabel}</Text>
             <Text>{vm.number}</Text>
             <Text style={styles.muted}>Émise le {vm.issuedAt}</Text>
-            <Text style={styles.muted}>Vente du {vm.saleDate}</Text>
+            <Text style={styles.muted}>{vm.dateLabel} {vm.saleDate}</Text>
           </View>
         </View>
 
@@ -86,7 +86,7 @@ function InvoicePdf({ vm }: { vm: InvoiceViewModel }) {
 
         {/* Totaux */}
         <View style={styles.totals}>
-          {vm.totals.vat > 0 ? (
+          {Math.abs(vm.totals.vat) > 0 ? (
             <>
               <Text>Total HT : {eur(vm.totals.ht)}</Text>
               {vm.vatBreakdown.map((b, i) => (

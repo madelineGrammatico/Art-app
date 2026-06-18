@@ -4,6 +4,7 @@ import { invoiceViewModel, type InvoiceForView } from "./invoiceViewModel"
 // US3.1 — le view-model porte toutes les mentions obligatoires (pur, sans DB).
 
 const base: InvoiceForView = {
+  type: "SALE",
   number: "INV-2026-000001",
   issuedAt: new Date("2026-03-10T14:30:00Z"),
   saleDate: new Date("2026-03-10T14:30:00Z"),
@@ -68,6 +69,30 @@ describe("invoiceViewModel", () => {
     const vm = invoiceViewModel(base)
     expect(vm.totals).toEqual({ ht: 250, vat: 0, ttc: 250 })
     expect(vm.paymentTerms).toBe("Payé comptant le 2026-03-10")
+  })
+
+  it("étiquette une facture de vente : « Facture » / « Vente du »", () => {
+    const vm = invoiceViewModel(base)
+    expect(vm.documentLabel).toBe("Facture")
+    expect(vm.dateLabel).toBe("Vente du")
+  })
+
+  it("étiquette un avoir : « Avoir » / « Remboursement du » / « Remboursé le »", () => {
+    const vm = invoiceViewModel({
+      ...base,
+      type: "CREDIT_NOTE",
+      number: "CN-2026-000001",
+      totalHT: -250,
+      totalVat: 0,
+      totalTTC: -250,
+      lineItems: [
+        { label: "Crépuscule", quantity: 1, unitPriceHT: -250, vatRate: 0, vatAmount: 0, lineTTC: -250 },
+      ],
+    })
+    expect(vm.documentLabel).toBe("Avoir")
+    expect(vm.dateLabel).toBe("Remboursement du")
+    expect(vm.paymentTerms).toBe("Remboursé le 2026-03-10")
+    expect(vm.totals.ttc).toBe(-250)
   })
 
   it("en franchise : porte la mention 293 B", () => {

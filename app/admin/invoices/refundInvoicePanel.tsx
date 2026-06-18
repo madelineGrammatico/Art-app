@@ -47,6 +47,11 @@ export function RefundInvoicePanel({
         setIsConfirm(false)
         return
       }
+      // Reset : après un remboursement partiel le composant reste monté (il reste des
+      // lignes remboursables) → sans reset, l'état (sélection, confirmation) serait périmé.
+      setOpen(false)
+      setIsConfirm(false)
+      setSelected([])
       router.refresh()
     })
   }

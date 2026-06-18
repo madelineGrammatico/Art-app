@@ -1,6 +1,7 @@
 import { Prisma, type Invoice, type InvoiceLineItem } from "@prisma/client"
 import { getSellerConfig } from "./sellerConfig"
 import { nextInvoiceNumber } from "./numbering"
+import { parisYear } from "./invoiceViewModel"
 
 export type AddressSnapshot = {
   fk: string | null
@@ -51,7 +52,7 @@ export async function emitSaleInvoice(
 ): Promise<Invoice & { lineItems: InvoiceLineItem[] }> {
   const seller = getSellerConfig()
   const vatRate = new Prisma.Decimal(seller.vatRate)
-  const number = await nextInvoiceNumber(tx, "SALE", args.saleDate.getFullYear())
+  const number = await nextInvoiceNumber(tx, "SALE", parisYear(args.saleDate))
 
   const lineItems = args.soldItems.map((item) => {
     const unitPriceHT = new Prisma.Decimal(item.unitPriceHT)

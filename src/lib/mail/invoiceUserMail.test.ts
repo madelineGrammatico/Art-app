@@ -11,6 +11,8 @@ import type { InvoiceViewModel } from "@/src/lib/invoice/invoiceViewModel"
 const mockedSend = vi.mocked(sendEmail)
 
 const vm: InvoiceViewModel = {
+  documentLabel: "Facture",
+  dateLabel: "Vente du",
   number: "INV-2026-000001",
   issuedAt: "2026-03-10",
   saleDate: "2026-03-10",

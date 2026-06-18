@@ -57,6 +57,7 @@ import {
   createRefundRecovery,
   createBasketWithItem,
   createAddress,
+  createSaleInvoice,
 } from "@/src/test/factories"
 
 const mockedVerify = vi.mocked(verifyWebhookSignature)
@@ -657,6 +658,49 @@ describe("POST /api/stripe/webhook", () => {
     )
     expect(mockedUserMail).not.toHaveBeenCalled()
     expect(mockedAdminMail).not.toHaveBeenCalled()
+  })
+
+  it("stamps emailSentAt after sending the invoice email (happy path)", async () => {
+    const buyer = await createUser({ email: "stamp-mail@test.local" })
+    const artwork = await createArtwork({ price: 80 })
+    await createBasketWithItem({ userId: buyer.id, artworkId: artwork.id })
+    const sessionId = "cs_test_email_stamp"
+
+    mockedVerify.mockResolvedValue(
+      makeCheckoutCompletedEvent({ sessionId, userId: buyer.id, artworkIds: [artwork.id] })
+    )
+
+    await POST(makeRequest())
+
+    const invoice = await saleInvoice(sessionId)
+    expect(invoice?.emailSentAt).not.toBeNull()
+  })
+
+  it("recovery: invoice committed but email never confirmed (emailSentAt null) → email re-sent on replay", async () => {
+    const buyer = await createUser({ email: "mail-recover@test.local" })
+    const artwork = await createArtwork({ price: 100, ownerId: buyer.id })
+    const sessionId = "cs_test_mail_recovery"
+
+    // Simulate a previous crash: the SALE invoice committed, but the email send never
+    // completed (emailSentAt left null by the factory).
+    const sale = await createSaleInvoice({
+      buyerId: buyer.id,
+      stripeSessionId: sessionId,
+      items: [{ artworkId: artwork.id, unitPriceHT: 100 }],
+    })
+    expect(sale.emailSentAt).toBeNull()
+
+    mockedVerify.mockResolvedValue(
+      makeCheckoutCompletedEvent({ sessionId, userId: buyer.id, artworkIds: [artwork.id] })
+    )
+
+    const res = await POST(makeRequest())
+
+    expect(res.status).toBe(200)
+    // Email (re)sent exactly once, and now confirmed.
+    expect(mockedInvoiceMail).toHaveBeenCalledOnce()
+    const invoice = await saleInvoice(sessionId)
+    expect(invoice?.emailSentAt).not.toBeNull()
   })
 
   it("attaches billing + shipping FK and snapshot to the sale invoice", async () => {
