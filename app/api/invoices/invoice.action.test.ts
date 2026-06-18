@@ -3,16 +3,24 @@ import { describe, it, expect, vi, beforeEach } from "vitest"
 vi.mock("@/src/lib/auth/auth", () => ({
   auth: vi.fn(),
 }))
+// refundSale est testé séparément (refundSale.test.ts) : ici on teste le wrapper
+// (auth + RBAC + délégation), donc on le mocke.
+vi.mock("@/src/lib/invoice/refundSale", () => ({
+  refundSale: vi.fn(),
+}))
 
-import { getUserInvoiceAction, getInvoiceAction } from "./invoice.action"
+import { getUserInvoiceAction, getInvoiceAction, refundSaleAction } from "./invoice.action"
 import { auth } from "@/src/lib/auth/auth"
+import { refundSale } from "@/src/lib/invoice/refundSale"
 import { createUser, createArtwork, createSaleInvoice } from "@/src/test/factories"
 import { sessionFor } from "@/src/test/auth-mock"
 
 const mockedAuth = vi.mocked(auth)
+const mockedRefundSale = vi.mocked(refundSale)
 
 beforeEach(() => {
   mockedAuth.mockReset()
+  mockedRefundSale.mockReset()
 })
 
 async function saleInvoiceFor(buyerId: string) {
@@ -120,5 +128,59 @@ describe("getInvoiceAction", () => {
     const res = await getInvoiceAction(invoice.id)
 
     expect((res as { id: string }).id).toBe(invoice.id)
+  })
+})
+
+describe("refundSaleAction", () => {
+  const fakeCreditNote = {
+    id: "cn-1",
+    number: "CN-2026-000001",
+    creditedInvoiceId: "inv-1",
+    totalTTC: -250,
+  }
+
+  it("rejects unauthenticated requests without calling refundSale", async () => {
+    mockedAuth.mockResolvedValue(null as never)
+
+    const res = await refundSaleAction({ invoiceId: "inv-1" })
+
+    expect((res as { error: string }).error).toBe("non authorisé")
+    expect(mockedRefundSale).not.toHaveBeenCalled()
+  })
+
+  it("rejects a CLIENT (no refund:invoice permission) without calling refundSale", async () => {
+    const client = await createUser()
+    mockedAuth.mockResolvedValue(sessionFor({ id: client.id, role: "CLIENT" }) as never)
+
+    const res = await refundSaleAction({ invoiceId: "inv-1" })
+
+    expect((res as { error: string }).error).toBe("non authorisé")
+    expect(mockedRefundSale).not.toHaveBeenCalled()
+  })
+
+  it("allows an ADMIN: delegates to refundSale and returns a serialized summary", async () => {
+    const admin = await createUser({ role: "ADMIN" })
+    mockedAuth.mockResolvedValue(sessionFor({ id: admin.id, role: "ADMIN" }) as never)
+    mockedRefundSale.mockResolvedValue(fakeCreditNote as never)
+
+    const res = await refundSaleAction({ invoiceId: "inv-1", artworkIds: ["a1"] })
+
+    expect(mockedRefundSale).toHaveBeenCalledWith({ invoiceId: "inv-1", artworkIds: ["a1"] })
+    expect(res).toEqual({
+      id: "cn-1",
+      number: "CN-2026-000001",
+      creditedInvoiceId: "inv-1",
+      totalTTC: -250,
+    })
+  })
+
+  it("surfaces a refundSale failure as an error message", async () => {
+    const admin = await createUser({ role: "ADMIN" })
+    mockedAuth.mockResolvedValue(sessionFor({ id: admin.id, role: "ADMIN" }) as never)
+    mockedRefundSale.mockRejectedValue(new Error("L'œuvre a déjà été remboursée (avoir existant)"))
+
+    const res = await refundSaleAction({ invoiceId: "inv-1" })
+
+    expect((res as { error: string }).error).toMatch(/déjà été remboursée/)
   })
 })

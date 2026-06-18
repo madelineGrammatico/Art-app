@@ -8,7 +8,7 @@ Le « pourquoi » et les décisions structurantes sont dans [MEMORY.md](../MEMOR
 
 > **Avancement étape 2** (cf. [B13-invoice-spec.md](B13-invoice-spec.md)) :
 > - ✅ **EPIC 0** config vendeur + snapshot · **EPIC 1** facture de vente, line items, numérotation, snapshot adresses + identité acheteur (`buyerName`) · **EPIC 2** calcul TVA par ligne (franchise / 5,5 %) · **EPIC 3** view-model (`invoiceViewModel`) + **PDF** (`renderInvoicePdf`, US3.1) + **email facture avec PDF joint** (US3.2, `sendInvoiceUserMail`) · **EPIC 4** consultation · **EPIC 5** avoir (`emitCreditNote`) + flux remboursement après-vente (`refundSale` + email `sendCreditNoteUserMail`) · **EPIC 6** immuabilité (pas d'`updateInvoiceAction`).
-> - ⏳ **Reste** : wrapper server action + RBAC `refund:invoice` + **UI admin** de remboursement (différés au spec) · validation config au boot (US0.1) · conservation/soft-delete (US6.2).
+> - ⏳ **Reste** : **UI admin** de remboursement (différée) · validation config au boot (US0.1) · conservation/soft-delete (US6.2).
 
 ---
 
@@ -113,7 +113,7 @@ Clés d'idempotence (anti-doublon, garanties au niveau schéma) :
 
 ## EPIC 5 — Remboursement / facture d'avoir
 
-> ✅ **Implémenté** : `emitCreditNote` (avoir, `src/lib/invoice/emitCreditNote.ts`) + orchestration `refundSale` (`src/lib/invoice/refundSale.ts`) + email avoir `sendCreditNoteUserMail`. Tests : `emitCreditNote.test.ts` (9), `refundSale.test.ts` (8), `creditNoteUserMail.test.ts` (5). **Différés** : wrapper server action + RBAC `refund:invoice` et UI admin de déclenchement (`refundSale` reste appelable/testable sans écran).
+> ✅ **Implémenté** : `emitCreditNote` (avoir, `src/lib/invoice/emitCreditNote.ts`) + orchestration `refundSale` (`src/lib/invoice/refundSale.ts`) + email avoir `sendCreditNoteUserMail` + **server action `refundSaleAction`** (RBAC `refund:invoice`, ADMIN). Tests : `emitCreditNote.test.ts` (9), `refundSale.test.ts` (8), `creditNoteUserMail.test.ts` (5), `invoice.action.test.ts` (refundSaleAction, 4). **Différée** : UI admin de déclenchement (`refundSaleAction` reste le point d'entrée RBAC sans écran).
 
 **Décision actée** : un remboursement n'est **pas** une mutation de la facture de vente (qui doit rester immuable), mais l'émission d'une **facture d'avoir** — **même modèle `Invoice`** avec `type = CREDIT_NOTE`, alignée sur le pipeline de remboursement Stripe.
 

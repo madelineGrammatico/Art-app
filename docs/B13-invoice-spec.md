@@ -8,7 +8,9 @@ Contrats figés pour écrire les tests, puis l'implémentation. Découle des use
 >
 > **Implémenté (EPIC 0/1/2/3/4/5 + immuabilité 6)** : modèle `Invoice`/`InvoiceLineItem`/`RefundRecovery` + `Counter` ; `sellerConfig` ; `numbering` (gapless + concurrent) ; `emitSaleInvoice` ; webhook réécrit (1 facture multi-lignes + `RefundRecovery` pour le cas race) ; `by-session` + page success + `invoice.action` + `certificate.action` adaptés ; `updateInvoiceAction` supprimée (immuabilité) ; snapshot `buyerName` ; `invoiceViewModel` (mentions obligatoires) ; **email facture** (`sendInvoiceUserMail`) **avec PDF joint** (`renderInvoicePdf`, @react-pdf/renderer) envoyé une fois à l'émission — remplace l'intérim reçu Stripe. **EPIC 5** : `emitCreditNote` (avoir, snapshot copié de l'origine, montants négatifs, série `CN-` gapless) + orchestration `refundSale` (garde anti-double-remboursement → `stripe.refunds.create` idempotent → transaction `emitCreditNote` + remise en vente `ownerId: null` → email avoir) + `sendCreditNoteUserMail`. Tests verts.
 >
-> **Reste à faire** : wrapper server action + RBAC `refund:invoice` + **UI admin** de remboursement (différés ici) ; câblage **validation config au boot** (US0.1) ; **conservation/soft-delete** (US6.2).
+> **EPIC 5 (suite)** : **server action `refundSaleAction`** (`invoice.action.ts`) — wrapper RBAC `refund:invoice` (ADMIN) autour de `refundSale`, renvoie un résumé sérialisé (pas de Decimal au-delà de la frontière).
+>
+> **Reste à faire** : **UI admin** de remboursement (différée) ; câblage **validation config au boot** (US0.1) ; **conservation/soft-delete** (US6.2).
 
 ---
 
@@ -183,7 +185,7 @@ totalHT  = Σ lineHT ; totalVat = Σ vatAmount ; totalTTC = Σ lineTTC
 
 **Constat** : il n'existe aujourd'hui **aucun** flux de remboursement après-vente (le seul remboursement est le cas race au checkout). L'avoir conforme implique donc de **construire ce flux** : déclencheur admin → `stripe.refunds.create` → `emitCreditNote` + (re)mise en vente de l'œuvre (`ownerId: null`) + email.
 
-**Décidé : go.** Toute la conception d'immuabilité en dépend. Périmètre B13 : **modèle + `emitCreditNote` + `refundSale` + tests** ✅ ; l'**UI admin** de déclenchement et son **wrapper server action + RBAC `refund:invoice`** restent **différés** (le flux reste appelable/testable sans écran).
+**Décidé : go.** Toute la conception d'immuabilité en dépend. Périmètre B13 : **modèle + `emitCreditNote` + `refundSale` + `refundSaleAction` (RBAC) + tests** ✅ ; seule l'**UI admin** de déclenchement reste **différée** (`refundSaleAction` est le point d'entrée RBAC, testable sans écran).
 
 ---
 
