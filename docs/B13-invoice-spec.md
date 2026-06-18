@@ -10,9 +10,9 @@ Contrats figés pour écrire les tests, puis l'implémentation. Découle des use
 >
 > **EPIC 5 (suite)** : **server action `refundSaleAction`** (`invoice.action.ts`) — wrapper RBAC `refund:invoice` (ADMIN) autour de `refundSale`, renvoie un résumé sérialisé (pas de Decimal au-delà de la frontière).
 >
-> **US0.1 / US6.2** : **validation config au boot** câblée (`instrumentation.ts` → `getSellerConfig()` côté runtime nodejs) ; **soft-delete** (`Invoice.archivedAt` + `archiveInvoiceAction` ADMIN, jamais de hard-delete ; consultation filtrée sur `archivedAt: null`).
+> **US0.1 / US6.2** : **validation config au boot** câblée (`instrumentation.ts` → `getSellerConfig()` côté runtime nodejs) ; **conservation 10 ans** = aucune suppression de facture (pas d'action de suppression ni de soft-delete — sans cas d'usage ; `onDelete: Restrict` bloque au niveau DB).
 >
-> **UI admin** : `/admin/invoices` (server component, protégé par `app/admin/layout.tsx`) — liste ventes + avoirs avec badges (archivée / avoir émis), boutons `RefundInvoiceButton` + `ArchiveInvoiceButton` (clients, confirmation en deux temps), gating `hasPermissions`. **B13 complet** (logique + tests + UI).
+> **UI admin** : `/admin/invoices` (server component, protégé par `app/admin/layout.tsx`) — liste ventes + avoirs avec badges (remb. partiel / remboursée), `RefundInvoicePanel` (remboursement **total ou partiel** : sélection par œuvre, n'affiche que les lignes non encore créditées), confirmation en deux temps, gating `hasPermissions`. **B13 complet** (logique + tests + UI).
 
 ---
 

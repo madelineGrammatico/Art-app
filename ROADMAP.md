@@ -28,7 +28,7 @@ Prévu **après** la couverture de tests (déjà en place). Mérite sa propre br
    - ✅ **Numéro séquentiel** unique sans trou (table `Counter`, séries `INV-`/`CN-` par an).
    - ✅ **Snapshot vendeur** (SIRET, raison sociale, régime TVA) figé à l'émission via config.
    - ✅ **TVA par ligne** (franchise → mention 293 B ; 5,5 % prêt côté code).
-   - ✅ **Conservation 10 ans** structurée (soft-delete `Invoice.archivedAt` + `archiveInvoiceAction`, jamais de hard-delete).
+   - ✅ **Conservation 10 ans** : aucune suppression de facture (pas d'action de suppression + `onDelete: Restrict` DB) ; pas de soft-delete (aucun cas d'usage de masquage).
    - ✅ **PDF** (« support durable », Code conso art. L221-13) — `renderInvoicePdf` (@react-pdf/renderer), joint à l'email.
 6. ✅ **FAIT** — **Email facture client** (`sendInvoiceUserMail`, envoyé à l'émission depuis le webhook, **PDF joint**) ; remplace l'intérim reçu Stripe.
 
@@ -36,8 +36,8 @@ Prévu **après** la couverture de tests (déjà en place). Mérite sa propre br
 
 8. ✅ **FAIT (EPIC 5)** — **server action `refundSaleAction`** : wrapper RBAC (`refund:invoice`, ADMIN) autour de `refundSale`, renvoie un résumé sérialisé.
 9. ✅ **FAIT (US0.1)** — **validation config au boot** : `instrumentation.ts` appelle `getSellerConfig()` au démarrage (runtime nodejs) → l'app échoue tôt si `SELLER_*` absent/incohérent.
-10. ✅ **FAIT (US6.2)** — **soft-delete / conservation** : `Invoice.archivedAt` + `archiveInvoiceAction` (ADMIN), jamais de hard-delete ; consultation filtrée.
-11. ✅ **FAIT (UI admin)** — page `/admin/invoices` : liste ventes + avoirs, boutons remboursement + archivage (confirmation en deux temps), gating RBAC.
+10. ✅ **FAIT (US6.2)** — **conservation 10 ans** : aucune suppression de facture (pas d'action de suppression + `onDelete: Restrict` DB). Pas de soft-delete : aucun cas métier de masquage (erreur → avoir).
+11. ✅ **FAIT (UI admin)** — page `/admin/invoices` : liste ventes + avoirs, remboursement total ou partiel (sélection par œuvre, confirmation en deux temps), gating RBAC.
 
 **B13_INVOICE : terminé** (logique + tests + UI). Prochaine branche : **B14_SHIPING**.
 

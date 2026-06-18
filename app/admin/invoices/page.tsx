@@ -6,8 +6,7 @@ import { prisma } from "@/src/lib/prisma"
 import { auth } from "@/src/lib/auth/auth"
 import { hasPermissions } from "@/src/lib/auth/permissions/permissions"
 import { UserRole } from "@prisma/client"
-import { RefundInvoiceButton } from "./refundInvoiceButton"
-import { ArchiveInvoiceButton } from "./archiveInvoiceButton"
+import { RefundInvoicePanel } from "./refundInvoicePanel"
 
 const eur = (n: number) => `${n.toFixed(2)} €`
 const day = (d: Date) => d.toISOString().slice(0, 10)
@@ -16,12 +15,13 @@ export default async function Page() {
   const session = await auth()
   const role = session?.user?.role as UserRole
 
-  // Toutes les factures (ventes + avoirs), archivées comprises (vue de gestion/audit).
+  // Toutes les factures (ventes + avoirs) — conservées en permanence (10 ans).
   const invoices = await prisma.invoice.findMany({
     orderBy: { issuedAt: "desc" },
     include: {
       lineItems: true,
-      creditNotes: { select: { id: true, number: true } },
+      // lineItems des avoirs → pour connaître les œuvres déjà créditées (remb. partiels).
+      creditNotes: { select: { id: true, number: true, lineItems: { select: { artworkId: true } } } },
     },
   })
 
@@ -32,9 +32,17 @@ export default async function Page() {
 
         {invoices.map((invoice) => {
           const isSale = invoice.type === "SALE"
-          const isArchived = invoice.archivedAt !== null
           const isRefunded = invoice.creditNotes.length > 0
           const total = Number(invoice.totalTTC)
+
+          // Œuvres déjà créditées par un avoir → exclues des lignes remboursables.
+          const creditedArtworkIds = new Set(
+            invoice.creditNotes.flatMap((cn) => cn.lineItems.map((l) => l.artworkId))
+          )
+          const refundableLines = invoice.lineItems
+            .filter((l) => !creditedArtworkIds.has(l.artworkId))
+            .map((l) => ({ artworkId: l.artworkId, label: l.label, lineTTC: Number(l.lineTTC) }))
+          const fullyRefunded = isSale && isRefunded && refundableLines.length === 0
 
           return (
             <Card className="flex items-start gap-4 p-4" key={invoice.id}>
@@ -44,14 +52,9 @@ export default async function Page() {
                   <span className="rounded bg-slate-200 px-2 py-0.5 text-xs">
                     {isSale ? "Facture" : "Avoir"}
                   </span>
-                  {isArchived && (
-                    <span className="rounded bg-slate-500 px-2 py-0.5 text-xs text-white">
-                      Archivée
-                    </span>
-                  )}
                   {isSale && isRefunded && (
                     <span className="rounded bg-amber-600 px-2 py-0.5 text-xs text-white">
-                      Avoir(s) émis
+                      {fullyRefunded ? "Remboursée" : "Remb. partiel"}
                     </span>
                   )}
                 </div>
@@ -70,15 +73,13 @@ export default async function Page() {
               </div>
 
               <div className="flex flex-col items-end gap-2">
-                {/* Remboursement : seulement une facture de vente, non archivée, pas encore créditée. */}
+                {/* Remboursement (total ou partiel) : vente avec au moins une œuvre
+                    encore remboursable (non déjà créditée). */}
                 {hasPermissions(role, "refund:invoice") &&
                   isSale &&
-                  !isArchived &&
-                  !isRefunded && <RefundInvoiceButton invoiceId={invoice.id} />}
-
-                {hasPermissions(role, "delete:invoice") && !isArchived && (
-                  <ArchiveInvoiceButton invoiceId={invoice.id} />
-                )}
+                  refundableLines.length > 0 && (
+                    <RefundInvoicePanel invoiceId={invoice.id} lines={refundableLines} />
+                  )}
               </div>
             </Card>
           )

@@ -8,8 +8,8 @@ Le « pourquoi » et les décisions structurantes sont dans [MEMORY.md](../MEMOR
 
 > **Avancement étape 2** (cf. [B13-invoice-spec.md](B13-invoice-spec.md)) :
 > - ✅ **EPIC 0** config vendeur + snapshot · **EPIC 1** facture de vente, line items, numérotation, snapshot adresses + identité acheteur (`buyerName`) · **EPIC 2** calcul TVA par ligne (franchise / 5,5 %) · **EPIC 3** view-model (`invoiceViewModel`) + **PDF** (`renderInvoicePdf`, US3.1) + **email facture avec PDF joint** (US3.2, `sendInvoiceUserMail`) · **EPIC 4** consultation · **EPIC 5** avoir (`emitCreditNote`) + flux remboursement après-vente (`refundSale` + email `sendCreditNoteUserMail`) · **EPIC 6** immuabilité (pas d'`updateInvoiceAction`).
-> - ✅ **US0.1** validation config au boot (`instrumentation.ts` → `getSellerConfig()`) · **US6.2** soft-delete / conservation (`Invoice.archivedAt` + `archiveInvoiceAction`, jamais de hard-delete).
-> - ✅ **UI admin** `/admin/invoices` (liste ventes + avoirs, boutons remboursement + archivage, gating RBAC). **B13 complet.**
+> - ✅ **US0.1** validation config au boot (`instrumentation.ts` → `getSellerConfig()`) · **US6.2** conservation 10 ans : **aucune suppression** de facture (pas d'action de suppression + `onDelete: Restrict` DB ; pas de soft-delete, sans cas d'usage).
+> - ✅ **UI admin** `/admin/invoices` (liste ventes + avoirs, remboursement **total ou partiel** par sélection d'œuvres, gating RBAC). **B13 complet.**
 
 ---
 
@@ -143,7 +143,7 @@ Clés d'idempotence (anti-doublon, garanties au niveau schéma) :
 - AC : toute tentative de mutation d'une facture finalisée est rejetée.
 - AC : un `status` léger ne subsiste que pour le **pré-émission** (brouillon non payé, sans numéro), jamais comme mécanisme légal.
 
-**US6.2 — Conservation 10 ans.** ✅ Pas de suppression dure : `Invoice.archivedAt` (soft-delete) + `archiveInvoiceAction` (ADMIN, `delete:invoice`, idempotent) — la pièce sort des vues actives mais reste conservée/accessible. Les vues de consultation excluent les archivées (`archivedAt: null`).
+**US6.2 — Conservation 10 ans.** ✅ Pas de suppression dure : **aucune action ne supprime ni ne masque une facture** (pas de soft-delete — aucun cas métier de masquage : toute pièce est un document émis, et une erreur se corrige par un avoir). Garanti par l'absence d'action de suppression + `onDelete: Restrict` sur `InvoiceLineItem.invoice` (bloque toute suppression au niveau DB).
 
 ---
 
