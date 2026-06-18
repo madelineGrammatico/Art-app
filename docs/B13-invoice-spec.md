@@ -12,7 +12,7 @@ Contrats figés pour écrire les tests, puis l'implémentation. Découle des use
 >
 > **US0.1 / US6.2** : **validation config au boot** câblée (`instrumentation.ts` → `getSellerConfig()` côté runtime nodejs) ; **soft-delete** (`Invoice.archivedAt` + `archiveInvoiceAction` ADMIN, jamais de hard-delete ; consultation filtrée sur `archivedAt: null`).
 >
-> **Reste à faire** : **UI admin** (déclenchement remboursement + archivage) — différée.
+> **UI admin** : `/admin/invoices` (server component, protégé par `app/admin/layout.tsx`) — liste ventes + avoirs avec badges (archivée / avoir émis), boutons `RefundInvoiceButton` + `ArchiveInvoiceButton` (clients, confirmation en deux temps), gating `hasPermissions`. **B13 complet** (logique + tests + UI).
 
 ---
 

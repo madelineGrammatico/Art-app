@@ -37,8 +37,9 @@ Prévu **après** la couverture de tests (déjà en place). Mérite sa propre br
 8. ✅ **FAIT (EPIC 5)** — **server action `refundSaleAction`** : wrapper RBAC (`refund:invoice`, ADMIN) autour de `refundSale`, renvoie un résumé sérialisé.
 9. ✅ **FAIT (US0.1)** — **validation config au boot** : `instrumentation.ts` appelle `getSellerConfig()` au démarrage (runtime nodejs) → l'app échoue tôt si `SELLER_*` absent/incohérent.
 10. ✅ **FAIT (US6.2)** — **soft-delete / conservation** : `Invoice.archivedAt` + `archiveInvoiceAction` (ADMIN), jamais de hard-delete ; consultation filtrée.
+11. ✅ **FAIT (UI admin)** — page `/admin/invoices` : liste ventes + avoirs, boutons remboursement + archivage (confirmation en deux temps), gating RBAC.
 
-**Reste à faire (étape 2) :** **UI admin** (déclenchement remboursement + archivage) — différée.
+**B13_INVOICE : terminé** (logique + tests + UI). Prochaine branche : **B14_SHIPING**.
 
 > Notes prod : migration destructive (ancien modèle `Invoice` incompatible — `npm run db:reset` en dev) ; variables d'env **`SELLER_*`** désormais requises pour que le webhook émette les factures (dev + prod, pas `.env.test` car mocké).
 

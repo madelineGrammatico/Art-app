@@ -9,7 +9,7 @@ Le « pourquoi » et les décisions structurantes sont dans [MEMORY.md](../MEMOR
 > **Avancement étape 2** (cf. [B13-invoice-spec.md](B13-invoice-spec.md)) :
 > - ✅ **EPIC 0** config vendeur + snapshot · **EPIC 1** facture de vente, line items, numérotation, snapshot adresses + identité acheteur (`buyerName`) · **EPIC 2** calcul TVA par ligne (franchise / 5,5 %) · **EPIC 3** view-model (`invoiceViewModel`) + **PDF** (`renderInvoicePdf`, US3.1) + **email facture avec PDF joint** (US3.2, `sendInvoiceUserMail`) · **EPIC 4** consultation · **EPIC 5** avoir (`emitCreditNote`) + flux remboursement après-vente (`refundSale` + email `sendCreditNoteUserMail`) · **EPIC 6** immuabilité (pas d'`updateInvoiceAction`).
 > - ✅ **US0.1** validation config au boot (`instrumentation.ts` → `getSellerConfig()`) · **US6.2** soft-delete / conservation (`Invoice.archivedAt` + `archiveInvoiceAction`, jamais de hard-delete).
-> - ⏳ **Reste** : **UI admin** (déclenchement remboursement + archivage) — différée.
+> - ✅ **UI admin** `/admin/invoices` (liste ventes + avoirs, boutons remboursement + archivage, gating RBAC). **B13 complet.**
 
 ---
 

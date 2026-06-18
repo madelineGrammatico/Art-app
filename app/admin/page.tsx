@@ -52,12 +52,18 @@ export default async function Page() {
                         
                     </Card>
                 )}
-                <Link 
+                <Link
                     href="/admin/artworks/newArtwork"
-                    className={buttonVariants({size:"lg"})} 
+                    className={buttonVariants({size:"lg"})}
                 >
                     Ajouter une nouvelle oeuvre
                 </Link>
+                { hasPermissions(role, 'view:invoice') && <Link
+                    href="/admin/invoices"
+                    className={buttonVariants({size:"lg", variant:"outline"})}
+                >
+                    Gérer les factures
+                </Link> }
             </CardContent>
         </Card>
     )
