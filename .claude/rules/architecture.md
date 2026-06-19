@@ -18,7 +18,7 @@ paths:
 - `src/lib/` — logique réutilisable
   - `auth/` — `auth.ts`, `actions/`, `permissions/permissions.ts`
   - `stripe/` — `stripe.ts`, `webhook-handler.ts`
-  - `mail/` — clients Resend (`incidentAdminMail`, `resetPawordMail`, `refundUserMail`)
+  - `mail/` — clients Resend (`checkoutRaceIncidentAdminMail`, `resetPawordMail`, `refundUserMail`)
   - `prisma.ts`, `executeAction.ts`, `shema.ts`, `utils.ts`
 - `src/components/` — `basket`, `checkout`, `address`, `profile`, `ui`, `reusable-ui`, `providers`
 - `store/` — Redux Toolkit (`store.ts`, `slices/`)

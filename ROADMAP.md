@@ -49,19 +49,51 @@ Prévu **après** la couverture de tests (déjà en place). Mérite sa propre br
 
 À démarrer **après** le merge de B13_INVOICE.
 
-**Inputs du calcul :**
-- Adresse de livraison (déjà dispo depuis B11).
-- **Dimensions + poids** → champs **à ajouter** sur `Artwork` (absents aujourd'hui).
-- Optionnel : transporteur choisi par l'utilisateur.
+> Recherche transporteurs (classiques + spécialisés œuvres d'art, agrégateurs, pricing, limites
+> poids/dimensions) : [docs/B14-shipping-research.md](docs/B14-shipping-research.md).
+> User stories (toutes décisions tranchées) : [docs/B14-shipping-user-stories.md](docs/B14-shipping-user-stories.md).
+> Spec technique (contrats Prisma, cycle de vie, signatures) : [docs/B14-shipping-spec.md](docs/B14-shipping-spec.md).
 
-**Intégrations :**
-- SDK transporteurs standards (DHL, La Poste, Mondial Relay… — à finaliser).
-- **Recherche à faire** : transporteurs **spécialisés œuvres d'art** (pièces volumineuses/lourdes/fragiles — ex. Convelio, MTAB, Crown Fine Art). Marché à part, à scoper avant de figer le schéma `Artwork` (éviter une double migration).
+**Statut : spec technique validée.** Prochaine étape : **implémentation + tests**, dans l'ordre des EPIC
+(0 → 1 → 1bis → 2 → 3 → 3bis → 4 → 5, cf. user stories), sur le modèle TDD de B13.
 
-**Contrainte produit clé :** sur le dashboard admin (création/édition d'œuvre), prévoir une **option pour restreindre la livraison aux transporteurs spécialisés** quand la pièce est trop volumineuse/lourde/fragile. → flag `requiresSpecialistCarrier: Boolean` (ou équivalent) sur `Artwork`, qui filtre les transporteurs proposés au checkout.
+**Correction actée en spec (à ne pas réintroduire) :** `InvoiceLineItem.artworkId` reste **NOT NULL** même
+pour les lignes `SHIPPING` (1 colis = 1 œuvre, jamais de ligne shipping agrégée multi-œuvres) — la
+contrainte `@@unique([invoiceId, artworkId])` devient `@@unique([invoiceId, artworkId, type])`. Trouvé en
+écrivant la spec : un `artworkId` nullable cassait le remboursement partiel par œuvre (US4.2).
 
-**Intégration Stripe :**
-- Shipping comme **`line_item` additionnel** sur la session Checkout (cohérent avec les line items de B13_INVOICE).
+**Nouveau (spec, EPIC 3bis)** : réservation de l'étiquette réelle chez Sendcloud **après** confirmation du
+paiement (pas au devis) — le devis (gratuit, sans quota) sert au prix checkout ; seule la création du colis
+consomme le quota/coût. Idempotence via `InvoiceLineItem.shippingParcelId`/`shippingParcelFailedAt`.
+
+**Point encore ouvert à l'implémentation** (cf. spec, table « Décisions ouvertes ») : verrouillage de
+prix Sendcloud entre devis et réservation (pas de mécanisme identifié, écart résiduel assumé).
+
+**Décidé** : l'alerte admin sur échec de création de colis post-paiement (EPIC 3bis) passe par un mail
+**dédié** `sendShippingIncidentAdminMail`, pas par réutilisation du mail B13 — qui a d'ailleurs été
+**renommé** `sendIncidentAdminMail` → `sendCheckoutRaceIncidentAdminMail`
+([src/lib/mail/checkoutRaceIncidentAdminMail.ts](src/lib/mail/checkoutRaceIncidentAdminMail.ts)) : son
+nom générique masquait qu'il ne couvre qu'un seul cas précis (race au checkout, remboursement
+issued/failed) — pas réutilisable tel quel pour un futur incident sans rapport (pas de remboursement, pas
+de montant).
+
+**Décisions clés (détail dans le doc user stories) :**
+- **Scope MVP = agrégateur classique Sendcloud uniquement.** Pas de Convelio/spécialiste dans cette
+  branche — différé à une itération ultérieure (flag `requiresSpecialistCarrier` réservé mais pas encore
+  branché sur un appel API).
+- **Retrait sur place** (pratique courante en vente d'art) : toujours proposé comme option à côté de la
+  livraison, coordination par email après paiement (pas de créneaux gérés dans l'app). Devient
+  **l'unique option** pour une œuvre hors des seuils transporteur standard (poids/dimensions) — ça lève le
+  besoin de bloquer la vente de ces œuvres.
+- **1 œuvre = 1 colis, toujours** (pas de mutualisation multi-œuvres — packing/marges de protection trop
+  complexes à valider automatiquement).
+- **1 seul mode de remise par commande** (livraison ou retrait, jamais mixte par œuvre) — simplicité avant
+  flexibilité ; à revisiter si la demande se confirme.
+- **TVA sur le shipping = même taux que le reste de la facture** (BOFIP art. 267 du CGI, pas un taux à
+  part).
+- **`InvoiceLineItem`** : nouvel enum `InvoiceLineItemType` (`ARTWORK`/`SHIPPING`), `artworkId` reste
+  **NOT NULL** même pour les lignes `SHIPPING` (1 œuvre = 1 colis ; cf. [spec §0](docs/B14-shipping-spec.md)),
+  contrainte `@@unique([invoiceId, artworkId, type])` — évolution non destructive du modèle B13.
 - Alternative `shipping_options` natif Stripe : à évaluer, possiblement trop rigide pour le filtrage spécialistes.
 
 ---
