@@ -5,7 +5,7 @@ import { verifyWebhookSignature } from "@/src/lib/stripe/webhook-handler"
 import Stripe from "stripe"
 import { Prisma } from "@prisma/client"
 import { sendRefundUserMail } from "@/src/lib/mail/refundUserMail"
-import { sendIncidentAdminMail } from "@/src/lib/mail/incidentAdminMail"
+import { sendCheckoutRaceIncidentAdminMail } from "@/src/lib/mail/checkoutRaceIncidentAdminMail"
 import { sendInvoiceUserMail } from "@/src/lib/mail/invoiceUserMail"
 import { emitSaleInvoice, type SoldItem } from "@/src/lib/invoice/emitSaleInvoice"
 import { invoiceViewModel } from "@/src/lib/invoice/invoiceViewModel"
@@ -156,7 +156,7 @@ async function handleRefunds(args: {
 
   if (!isRecovery) {
     try {
-      const adminMailRes = await sendIncidentAdminMail({
+      const adminMailRes = await sendCheckoutRaceIncidentAdminMail({
         sessionId,
         userId,
         userEmail,

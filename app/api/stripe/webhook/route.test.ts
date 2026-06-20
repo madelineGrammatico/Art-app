@@ -14,8 +14,8 @@ vi.mock("@/src/lib/stripe/stripe", () => ({
 vi.mock("@/src/lib/mail/refundUserMail", () => ({
   sendRefundUserMail: vi.fn(),
 }))
-vi.mock("@/src/lib/mail/incidentAdminMail", () => ({
-  sendIncidentAdminMail: vi.fn(),
+vi.mock("@/src/lib/mail/checkoutRaceIncidentAdminMail", () => ({
+  sendCheckoutRaceIncidentAdminMail: vi.fn(),
 }))
 vi.mock("@/src/lib/mail/invoiceUserMail", () => ({
   sendInvoiceUserMail: vi.fn(),
@@ -48,7 +48,7 @@ import { POST } from "./route"
 import { verifyWebhookSignature } from "@/src/lib/stripe/webhook-handler"
 import { stripe } from "@/src/lib/stripe/stripe"
 import { sendRefundUserMail } from "@/src/lib/mail/refundUserMail"
-import { sendIncidentAdminMail } from "@/src/lib/mail/incidentAdminMail"
+import { sendCheckoutRaceIncidentAdminMail } from "@/src/lib/mail/checkoutRaceIncidentAdminMail"
 import { sendInvoiceUserMail } from "@/src/lib/mail/invoiceUserMail"
 import { prisma } from "@/src/lib/prisma"
 import {
@@ -63,7 +63,7 @@ import {
 const mockedVerify = vi.mocked(verifyWebhookSignature)
 const mockedRefund = vi.mocked(stripe.refunds.create)
 const mockedUserMail = vi.mocked(sendRefundUserMail)
-const mockedAdminMail = vi.mocked(sendIncidentAdminMail)
+const mockedAdminMail = vi.mocked(sendCheckoutRaceIncidentAdminMail)
 const mockedInvoiceMail = vi.mocked(sendInvoiceUserMail)
 
 type AddressBlob = {
