@@ -12,18 +12,32 @@ import { Artwork } from '@prisma/client'
 
 export function ArtworkForm({artwork}: {artwork?: Artwork}) {
   
+    // "" → null (donnée manquante), sinon nombre. cleanDim côté action revalide (> 0, fini).
+    const dimOrNull = (raw: FormDataEntryValue | null): number | null => {
+        const s = String(raw ?? "").trim()
+        return s === "" ? null : Number(s)
+    }
+
     const onSubmit = async (FormData: FormData) => {
         let error: null | string = null
+        const dims = {
+            weightKg: dimOrNull(FormData.get('weightKg')),
+            lengthCm: dimOrNull(FormData.get('lengthCm')),
+            widthCm: dimOrNull(FormData.get('widthCm')),
+            heightCm: dimOrNull(FormData.get('heightCm')),
+        }
         if(artwork) {
             const json = await editArtworkAction(artwork.id, {
                 title: String(FormData.get('title')),
-                price: Number(FormData.get('price'))
+                price: Number(FormData.get('price')),
+                ...dims,
             })
             error= json.error
         } else {
             const json = await createArtworkAction({
                 title: String(FormData.get('title')),
-                price: Number(FormData.get('price'))
+                price: Number(FormData.get('price')),
+                ...dims,
             })
             error= json.error
         }
@@ -55,12 +69,64 @@ export function ArtworkForm({artwork}: {artwork?: Artwork}) {
                     </Label>
                     <Label>
                         Prix
-                        <Input 
+                        <Input
                             defaultValue={String(artwork?.price)}
                             name="price"
                             className="bg-white text-black"
                         />
                     </Label>
+                    <p className="text-sm text-black/80">
+                        Dimensions & poids (requis pour la livraison ; sinon retrait sur place uniquement)
+                    </p>
+                    <Label>
+                        Poids (kg)
+                        <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            defaultValue={artwork?.weightKg != null ? String(artwork.weightKg) : ""}
+                            name="weightKg"
+                            className="bg-white text-black"
+                        />
+                    </Label>
+                    <Label>
+                        Longueur (cm)
+                        <Input
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            defaultValue={artwork?.lengthCm != null ? String(artwork.lengthCm) : ""}
+                            name="lengthCm"
+                            className="bg-white text-black"
+                        />
+                    </Label>
+                    <Label>
+                        Largeur (cm)
+                        <Input
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            defaultValue={artwork?.widthCm != null ? String(artwork.widthCm) : ""}
+                            name="widthCm"
+                            className="bg-white text-black"
+                        />
+                    </Label>
+                    <Label>
+                        Hauteur (cm)
+                        <Input
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            defaultValue={artwork?.heightCm != null ? String(artwork.heightCm) : ""}
+                            name="heightCm"
+                            className="bg-white text-black"
+                        />
+                    </Label>
+                    {artwork?.requiresSpecialistCarrier && (
+                        <p className="text-sm font-medium text-amber-900">
+                            ⚠️ Hors gabarit transporteur standard — retrait sur place ou transporteur spécialisé.
+                        </p>
+                    )}
                     <SubmitButton/>
                 </Form>
             </div>

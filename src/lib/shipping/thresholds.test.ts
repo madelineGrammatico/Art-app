@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest"
 import { Prisma } from "@prisma/client"
-import { exceedsStandardThresholds } from "./thresholds"
+import { exceedsStandardThresholds, computeRequiresSpecialistCarrier } from "./thresholds"
 import type { ShippingConfig } from "./shippingConfig"
 
 // US1.1 — Détection « hors standard » : true si le poids OU la somme des dimensions
@@ -43,5 +43,39 @@ describe("exceedsStandardThresholds", () => {
 
   it("le dépassement d'un seul critère suffit (dimensions OK mais poids KO)", () => {
     expect(exceedsStandardThresholds(dims(30, 10, 10, 10), config)).toBe(true)
+  })
+})
+
+describe("computeRequiresSpecialistCarrier", () => {
+  it("dimensions complètes hors seuils → true", () => {
+    expect(
+      computeRequiresSpecialistCarrier({ weightKg: 40, lengthCm: 10, widthCm: 10, heightCm: 10 }, config)
+    ).toBe(true)
+  })
+
+  it("dimensions complètes dans les seuils → false", () => {
+    expect(
+      computeRequiresSpecialistCarrier({ weightKg: 5, lengthCm: 40, widthCm: 30, heightCm: 20 }, config)
+    ).toBe(false)
+  })
+
+  it("une dimension manquante → false (donnée incomplète, on ne conclut pas)", () => {
+    expect(
+      computeRequiresSpecialistCarrier({ weightKg: 40, lengthCm: null, widthCm: 10, heightCm: 10 }, config)
+    ).toBe(false)
+  })
+
+  it("accepte des Decimal aussi bien que des nombres", () => {
+    expect(
+      computeRequiresSpecialistCarrier(
+        {
+          weightKg: new Prisma.Decimal(40),
+          lengthCm: new Prisma.Decimal(10),
+          widthCm: new Prisma.Decimal(10),
+          heightCm: new Prisma.Decimal(10),
+        },
+        config
+      )
+    ).toBe(true)
   })
 })

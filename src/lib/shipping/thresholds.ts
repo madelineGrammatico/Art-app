@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client"
+import { Prisma } from "@prisma/client"
 import type { ShippingConfig } from "./shippingConfig"
 
 // Dimensions physiques d'une œuvre — non-null requis (la validation « donnée manquante »
@@ -23,5 +23,46 @@ export function exceedsStandardThresholds(
   return (
     artwork.weightKg.greaterThan(config.maxWeightKg) ||
     dimensionSum.greaterThan(config.maxDimensionSumCm)
+  )
+}
+
+type MaybeDimension = Prisma.Decimal | number | string | null | undefined
+
+/**
+ * Recalcule le flag `Artwork.requiresSpecialistCarrier` (US0.1), appelé à chaque
+ * create/update admin. Si une dimension manque (donnée physique incomplète) → false :
+ * on ne peut pas conclure « hors standard » sans mesures complètes, et le flag ne sert
+ * qu'à l'affichage admin (la décision argent se fait en live au checkout, spec §2).
+ */
+export function computeRequiresSpecialistCarrier(
+  dims: {
+    weightKg: MaybeDimension
+    lengthCm: MaybeDimension
+    widthCm: MaybeDimension
+    heightCm: MaybeDimension
+  },
+  config: ShippingConfig
+): boolean {
+  const { weightKg, lengthCm, widthCm, heightCm } = dims
+  if (
+    weightKg === null ||
+    weightKg === undefined ||
+    lengthCm === null ||
+    lengthCm === undefined ||
+    widthCm === null ||
+    widthCm === undefined ||
+    heightCm === null ||
+    heightCm === undefined
+  ) {
+    return false
+  }
+  return exceedsStandardThresholds(
+    {
+      weightKg: new Prisma.Decimal(weightKg),
+      lengthCm: new Prisma.Decimal(lengthCm),
+      widthCm: new Prisma.Decimal(widthCm),
+      heightCm: new Prisma.Decimal(heightCm),
+    },
+    config
   )
 }
