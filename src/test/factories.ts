@@ -41,17 +41,30 @@ export async function createArtwork(
 // de test (franchise). Numéro unique pour ne pas violer la contrainte @@unique.
 export async function createSaleInvoice(args: {
   buyerId: string
-  items: { artworkId: string; unitPriceHT?: number; label?: string }[]
+  items: {
+    artworkId: string
+    unitPriceHT?: number
+    label?: string
+    // Ligne SHIPPING optionnelle pour la même œuvre (B14, 1 colis = 1 œuvre).
+    shipping?: {
+      unitPriceHT?: number
+      shippingMethodId?: string
+      shippingParcelId?: string | null
+      shippingParcelFailedAt?: Date | null
+    }
+  }[]
   stripeSessionId?: string | null
   stripePaymentIntentId?: string | null
   number?: string
   buyerName?: string
+  fulfillmentMode?: "DELIVERY" | "PICKUP"
   billing?: { street?: string; postalCode?: string; city?: string; country?: string }
   shipping?: { street?: string; postalCode?: string; city?: string; country?: string }
 }) {
-  const lineItems = args.items.map((it) => {
+  const lineItems = args.items.flatMap((it) => {
     const unitPriceHT = it.unitPriceHT ?? 100
-    return {
+    const artworkLine = {
+      type: "ARTWORK" as const,
       artworkId: it.artworkId,
       label: it.label ?? "Œuvre de test",
       unitPriceHT,
@@ -60,6 +73,24 @@ export async function createSaleInvoice(args: {
       vatAmount: 0,
       lineTTC: unitPriceHT,
     }
+    if (!it.shipping) return [artworkLine]
+    const shippingHT = it.shipping.unitPriceHT ?? 10
+    return [
+      artworkLine,
+      {
+        type: "SHIPPING" as const,
+        artworkId: it.artworkId,
+        label: "Livraison de test",
+        unitPriceHT: shippingHT,
+        quantity: 1,
+        vatRate: 0,
+        vatAmount: 0,
+        lineTTC: shippingHT,
+        shippingMethodId: it.shipping.shippingMethodId ?? "sc_test",
+        shippingParcelId: it.shipping.shippingParcelId ?? null,
+        shippingParcelFailedAt: it.shipping.shippingParcelFailedAt ?? null,
+      },
+    ]
   })
   const totalHT = lineItems.reduce((s, l) => s + Number(l.unitPriceHT), 0)
   return prisma.invoice.create({
@@ -69,6 +100,7 @@ export async function createSaleInvoice(args: {
       saleDate: new Date(),
       buyerId: args.buyerId,
       buyerName: args.buyerName ?? "Client Test",
+      fulfillmentMode: args.fulfillmentMode ?? "DELIVERY",
       stripeSessionId: args.stripeSessionId ?? null,
       stripePaymentIntentId: args.stripePaymentIntentId ?? null,
       sellerName: "Galerie Test",

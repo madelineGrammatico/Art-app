@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server"
 import { auth } from "@/src/lib/auth/auth"
 import { prisma } from "@/src/lib/prisma"
 import { stripe, CURRENCY } from "@/src/lib/stripe/stripe"
+import { computeCartShipping } from "@/src/lib/shipping/cartShipping"
 
 export async function POST(request: NextRequest) {
   try {
@@ -21,18 +22,34 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       )
     }
-    const { billingAddressId, shippingAddressId } = (body ?? {}) as {
+    const {
+      billingAddressId,
+      shippingAddressId,
+      fulfillmentMode: fulfillmentModeRaw,
+      shippingSelections: shippingSelectionsRaw,
+    } = (body ?? {}) as {
       billingAddressId?: unknown
       shippingAddressId?: unknown
+      fulfillmentMode?: unknown
+      shippingSelections?: unknown
+    }
+
+    // Mode de remise (B14). Défaut DELIVERY. En PICKUP, pas d'adresse de livraison
+    // requise (US1bis) ; l'adresse de facturation reste obligatoire dans les deux cas.
+    const fulfillmentMode = fulfillmentModeRaw === "PICKUP" ? "PICKUP" : "DELIVERY"
+
+    if (typeof billingAddressId !== "string" || !billingAddressId) {
+      return NextResponse.json(
+        { error: "Adresse de facturation requise" },
+        { status: 400 }
+      )
     }
     if (
-      typeof billingAddressId !== "string" ||
-      typeof shippingAddressId !== "string" ||
-      !billingAddressId ||
-      !shippingAddressId
+      fulfillmentMode === "DELIVERY" &&
+      (typeof shippingAddressId !== "string" || !shippingAddressId)
     ) {
       return NextResponse.json(
-        { error: "Adresses de facturation et livraison requises" },
+        { error: "Adresse de livraison requise" },
         { status: 400 }
       )
     }
@@ -60,18 +77,114 @@ export async function POST(request: NextRequest) {
 
     // Validate addresses: must exist AND belong to the session user.
     // Single query handles both "unknown id" and "id of another user".
-    const uniqueIds = Array.from(new Set([billingAddressId, shippingAddressId]))
+    const idsToValidate =
+      fulfillmentMode === "DELIVERY"
+        ? [billingAddressId, shippingAddressId as string]
+        : [billingAddressId]
+    const uniqueIds = Array.from(new Set(idsToValidate))
     const ownedAddresses = await prisma.postalAddress.findMany({
       where: { id: { in: uniqueIds }, userId },
     })
     const ownedById = new Map(ownedAddresses.map((a) => [a.id, a]))
     const billing = ownedById.get(billingAddressId)
-    const shipping = ownedById.get(shippingAddressId)
-    if (!billing || !shipping) {
+    const shipping =
+      fulfillmentMode === "DELIVERY"
+        ? ownedById.get(shippingAddressId as string)
+        : undefined
+    if (!billing || (fulfillmentMode === "DELIVERY" && !shipping)) {
       return NextResponse.json(
         { error: "Adresse invalide ou inaccessible" },
         { status: 400 }
       )
+    }
+
+    // Devis transporteur (DELIVERY uniquement) : gelé maintenant pour facturer au webhook
+    // exactement le montant montré ici (spec §3). Jamais de calcul à 0 € : données
+    // physiques manquantes ou échec transporteur → 400 explicite (US0.2 / US2.1).
+    type FrozenSelection = {
+      artworkId: string
+      shippingMethodId: string
+      label: string
+      unitPriceHTCents: number
+    }
+    const frozenShipping: FrozenSelection[] = []
+
+    if (fulfillmentMode === "DELIVERY") {
+      const shippingAddr = shipping!
+      let cart: Awaited<ReturnType<typeof computeCartShipping>>
+      try {
+        cart = await computeCartShipping({
+          items: basket.items.map((item) => ({
+            artworkId: item.artworkId,
+            weightKg: item.artwork.weightKg,
+            lengthCm: item.artwork.lengthCm,
+            widthCm: item.artwork.widthCm,
+            heightCm: item.artwork.heightCm,
+          })),
+          toAddress: {
+            street: shippingAddr.street,
+            postalCode: shippingAddr.postalCode,
+            city: shippingAddr.city,
+            country: shippingAddr.country,
+          },
+        })
+      } catch (shippingErr) {
+        return NextResponse.json(
+          {
+            error: `Frais de livraison indisponibles : ${
+              shippingErr instanceof Error ? shippingErr.message : "erreur transporteur"
+            }`,
+          },
+          { status: 400 }
+        )
+      }
+
+      if (!cart.eligible) {
+        return NextResponse.json(
+          {
+            error:
+              "Certaines œuvres sont trop volumineuses ou lourdes pour la livraison standard : seul le retrait sur place est possible pour cette commande.",
+            blockingArtworkIds: cart.blockingArtworkIds,
+          },
+          { status: 400 }
+        )
+      }
+
+      // Sélection client par œuvre (quand plusieurs offres). Une seule offre → auto-choisie.
+      const clientSelections = new Map<string, string>()
+      if (Array.isArray(shippingSelectionsRaw)) {
+        for (const sel of shippingSelectionsRaw) {
+          if (
+            sel &&
+            typeof sel.artworkId === "string" &&
+            typeof sel.shippingMethodId === "string"
+          ) {
+            clientSelections.set(sel.artworkId, sel.shippingMethodId)
+          }
+        }
+      }
+
+      for (const [artworkId, rates] of cart.quotesByArtwork) {
+        let chosen = rates.length === 1 ? rates[0] : undefined
+        if (!chosen) {
+          const selectedId = clientSelections.get(artworkId)
+          chosen = rates.find((r) => r.shippingMethodId === selectedId)
+        }
+        if (!chosen) {
+          return NextResponse.json(
+            {
+              error: `Plusieurs options de livraison disponibles : merci de choisir un transporteur (œuvre ${artworkId}).`,
+            },
+            { status: 400 }
+          )
+        }
+        frozenShipping.push({
+          artworkId,
+          shippingMethodId: chosen.shippingMethodId,
+          label: chosen.label,
+          unitPriceHTCents: chosen.priceHTCents,
+        })
+      }
     }
 
     const configuredAppUrl =
@@ -84,7 +197,7 @@ export async function POST(request: NextRequest) {
     }
     const appUrl = configuredAppUrl ?? "http://localhost:3000"
 
-    const lineItems = basket.items.map(item => ({
+    const artworkLineItems = basket.items.map(item => ({
       price_data: {
         currency: CURRENCY,
         product_data: {
@@ -95,6 +208,16 @@ export async function POST(request: NextRequest) {
       },
       quantity: 1
     }))
+    // Frais de port = lignes Stripe additionnelles (le client paie le devis gelé).
+    const shippingLineItems = frozenShipping.map((s) => ({
+      price_data: {
+        currency: CURRENCY,
+        product_data: { name: s.label },
+        unit_amount: s.unitPriceHTCents,
+      },
+      quantity: 1,
+    }))
+    const lineItems = [...artworkLineItems, ...shippingLineItems]
 
     // Snapshot the addresses into metadata at session creation. Two upsides
     // over fetching at webhook time: (1) zero race if the user deletes the
@@ -107,13 +230,15 @@ export async function POST(request: NextRequest) {
       city: billing.city,
       country: billing.country,
     })
-    const shippingAddressBlob = JSON.stringify({
-      id: shipping.id,
-      street: shipping.street,
-      postalCode: shipping.postalCode,
-      city: shipping.city,
-      country: shipping.country,
-    })
+    const shippingAddressBlob = shipping
+      ? JSON.stringify({
+          id: shipping.id,
+          street: shipping.street,
+          postalCode: shipping.postalCode,
+          city: shipping.city,
+          country: shipping.country,
+        })
+      : null
 
     const checkoutSession = await stripe.checkout.sessions.create({
       mode: "payment",
@@ -128,7 +253,11 @@ export async function POST(request: NextRequest) {
         userId,
         artworkIds: basket.items.map(item => item.artworkId).join(","),
         billingAddress: billingAddressBlob,
-        shippingAddress: shippingAddressBlob,
+        fulfillmentMode,
+        ...(shippingAddressBlob ? { shippingAddress: shippingAddressBlob } : {}),
+        ...(frozenShipping.length
+          ? { shippingSelections: JSON.stringify(frozenShipping) }
+          : {}),
       }
     })
 

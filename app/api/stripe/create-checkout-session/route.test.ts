@@ -9,16 +9,36 @@ vi.mock("@/src/lib/stripe/stripe", () => ({
   },
   CURRENCY: "eur",
 }))
+// Orchestration des devis mockée (testée à part dans cartShipping.test.ts) : ici on
+// vérifie le câblage checkout (gel du devis, lignes Stripe, metadata, rejets 400).
+vi.mock("@/src/lib/shipping/cartShipping", () => ({
+  computeCartShipping: vi.fn(),
+}))
 
 import { POST } from "./route"
 import { auth } from "@/src/lib/auth/auth"
 import { stripe } from "@/src/lib/stripe/stripe"
+import { computeCartShipping } from "@/src/lib/shipping/cartShipping"
 import { prisma } from "@/src/lib/prisma"
 import { createUser, createArtwork, createAddress } from "@/src/test/factories"
 import { sessionFor } from "@/src/test/auth-mock"
 
 const mockedAuth = vi.mocked(auth)
 const mockedCreateSession = vi.mocked(stripe.checkout.sessions.create)
+const mockedComputeShipping = vi.mocked(computeCartShipping)
+
+// Par défaut : tout le panier est éligible livraison, une seule offre par œuvre (990 c).
+function eligibleSingleRate() {
+  mockedComputeShipping.mockImplementation(async ({ items }) => ({
+    eligible: true,
+    quotesByArtwork: new Map(
+      items.map((i) => [
+        i.artworkId,
+        [{ shippingMethodId: "sc_default", label: "Livraison standard", priceHTCents: 990 }],
+      ])
+    ),
+  }))
+}
 
 async function createBasketWithItems(userId: string, artworkIds: string[]) {
   return prisma.basket.create({
@@ -40,6 +60,8 @@ function makeReq(body: unknown = {}) {
 beforeEach(() => {
   mockedAuth.mockReset()
   mockedCreateSession.mockReset()
+  mockedComputeShipping.mockReset()
+  eligibleSingleRate()
 })
 
 describe("POST /api/stripe/create-checkout-session", () => {
@@ -185,14 +207,24 @@ describe("POST /api/stripe/create-checkout-session", () => {
     expect(callArg.mode).toBe("payment")
     expect(callArg.customer_email).toBe("buyer@test.local")
     expect(callArg.payment_intent_data?.receipt_email).toBe("buyer@test.local")
-    expect(callArg.line_items).toHaveLength(2)
+    // 2 œuvres + 2 lignes de livraison (990 c chacune).
+    expect(callArg.line_items).toHaveLength(4)
     const amounts = callArg.line_items!.map((li) => li.price_data!.unit_amount)
     expect(amounts).toContain(10000)
     expect(amounts).toContain(24999)
+    expect(amounts.filter((a) => a === 990)).toHaveLength(2)
 
     expect(callArg.metadata?.userId).toBe(buyer.id)
+    expect(callArg.metadata?.fulfillmentMode).toBe("DELIVERY")
     const artworkIds = (callArg.metadata?.artworkIds as string).split(",").sort()
     expect(artworkIds).toEqual([a1.id, a2.id].sort())
+
+    // Devis gelé dans les metadata (1 sélection par œuvre).
+    const frozen = JSON.parse(callArg.metadata?.shippingSelections as string)
+    expect(frozen).toHaveLength(2)
+    expect(frozen[0]).toEqual(
+      expect.objectContaining({ shippingMethodId: "sc_default", unitPriceHTCents: 990 })
+    )
 
     const billingBlob = JSON.parse(callArg.metadata?.billingAddress as string)
     expect(billingBlob).toEqual({
@@ -235,6 +267,126 @@ describe("POST /api/stripe/create-checkout-session", () => {
     } finally {
       vi.unstubAllEnvs()
     }
+  })
+
+  // --- B14 : livraison / retrait ---
+
+  it("DELIVERY: œuvre hors seuils → 400, pas de session Stripe", async () => {
+    const buyer = await createUser()
+    const addr = await createAddress({ userId: buyer.id })
+    const big = await createArtwork({ price: 100 })
+    await createBasketWithItems(buyer.id, [big.id])
+    mockedAuth.mockResolvedValue(sessionFor({ id: buyer.id }) as never)
+    mockedComputeShipping.mockResolvedValue({ eligible: false, blockingArtworkIds: [big.id] })
+
+    const res = await POST(makeReq({ billingAddressId: addr.id, shippingAddressId: addr.id }))
+
+    expect(res.status).toBe(400)
+    const json = await res.json()
+    expect(json.error).toMatch(/retrait sur place/i)
+    expect(json.blockingArtworkIds).toEqual([big.id])
+    expect(mockedCreateSession).not.toHaveBeenCalled()
+  })
+
+  it("DELIVERY: données physiques manquantes / échec transporteur → 400 (jamais 0 €)", async () => {
+    const buyer = await createUser()
+    const addr = await createAddress({ userId: buyer.id })
+    const artwork = await createArtwork({ price: 100 })
+    await createBasketWithItems(buyer.id, [artwork.id])
+    mockedAuth.mockResolvedValue(sessionFor({ id: buyer.id }) as never)
+    mockedComputeShipping.mockRejectedValue(new Error("Poids/dimensions manquants"))
+
+    const res = await POST(makeReq({ billingAddressId: addr.id, shippingAddressId: addr.id }))
+
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toMatch(/livraison indisponibles/i)
+    expect(mockedCreateSession).not.toHaveBeenCalled()
+  })
+
+  it("DELIVERY: plusieurs offres sans sélection client → 400", async () => {
+    const buyer = await createUser()
+    const addr = await createAddress({ userId: buyer.id })
+    const artwork = await createArtwork({ price: 100 })
+    await createBasketWithItems(buyer.id, [artwork.id])
+    mockedAuth.mockResolvedValue(sessionFor({ id: buyer.id }) as never)
+    mockedComputeShipping.mockResolvedValue({
+      eligible: true,
+      quotesByArtwork: new Map([
+        [
+          artwork.id,
+          [
+            { shippingMethodId: "sc_1", label: "Colissimo", priceHTCents: 990 },
+            { shippingMethodId: "sc_2", label: "Mondial Relay", priceHTCents: 590 },
+          ],
+        ],
+      ]),
+    })
+
+    const res = await POST(makeReq({ billingAddressId: addr.id, shippingAddressId: addr.id }))
+
+    expect(res.status).toBe(400)
+    expect((await res.json()).error).toMatch(/choisir un transporteur/i)
+    expect(mockedCreateSession).not.toHaveBeenCalled()
+  })
+
+  it("DELIVERY: plusieurs offres avec sélection client → gèle l'offre choisie", async () => {
+    const buyer = await createUser()
+    const addr = await createAddress({ userId: buyer.id })
+    const artwork = await createArtwork({ price: 100 })
+    await createBasketWithItems(buyer.id, [artwork.id])
+    mockedAuth.mockResolvedValue(sessionFor({ id: buyer.id }) as never)
+    mockedComputeShipping.mockResolvedValue({
+      eligible: true,
+      quotesByArtwork: new Map([
+        [
+          artwork.id,
+          [
+            { shippingMethodId: "sc_1", label: "Colissimo", priceHTCents: 990 },
+            { shippingMethodId: "sc_2", label: "Mondial Relay", priceHTCents: 590 },
+          ],
+        ],
+      ]),
+    })
+    mockedCreateSession.mockResolvedValue({ id: "cs_sel", url: "https://x" } as never)
+
+    const res = await POST(
+      makeReq({
+        billingAddressId: addr.id,
+        shippingAddressId: addr.id,
+        shippingSelections: [{ artworkId: artwork.id, shippingMethodId: "sc_2" }],
+      })
+    )
+
+    expect(res.status).toBe(200)
+    const callArg = mockedCreateSession.mock.calls[0]![0] as Stripe.Checkout.SessionCreateParams
+    const frozen = JSON.parse(callArg.metadata?.shippingSelections as string)
+    expect(frozen[0]).toEqual(
+      expect.objectContaining({ shippingMethodId: "sc_2", unitPriceHTCents: 590 })
+    )
+    const amounts = callArg.line_items!.map((li) => li.price_data!.unit_amount)
+    expect(amounts).toContain(590)
+  })
+
+  it("PICKUP: pas de devis transporteur, pas d'adresse de livraison requise, pas de ligne shipping", async () => {
+    const buyer = await createUser()
+    const billing = await createAddress({ userId: buyer.id })
+    const artwork = await createArtwork({ price: 100 })
+    await createBasketWithItems(buyer.id, [artwork.id])
+    mockedAuth.mockResolvedValue(sessionFor({ id: buyer.id }) as never)
+    mockedCreateSession.mockResolvedValue({ id: "cs_pickup", url: "https://x" } as never)
+
+    const res = await POST(
+      makeReq({ billingAddressId: billing.id, fulfillmentMode: "PICKUP" })
+    )
+
+    expect(res.status).toBe(200)
+    expect(mockedComputeShipping).not.toHaveBeenCalled()
+
+    const callArg = mockedCreateSession.mock.calls[0]![0] as Stripe.Checkout.SessionCreateParams
+    expect(callArg.metadata?.fulfillmentMode).toBe("PICKUP")
+    expect(callArg.metadata?.shippingAddress).toBeUndefined()
+    expect(callArg.metadata?.shippingSelections).toBeUndefined()
+    expect(callArg.line_items).toHaveLength(1) // l'œuvre seule, pas de port
   })
 
   it("returns 500 when Stripe rejects the session creation", async () => {
