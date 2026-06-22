@@ -283,6 +283,7 @@ async function createParcelsForInvoice(invoice: EmittedInvoice, sessionId: strin
       }
       const { parcelId } = await createParcel({
         shippingMethodId: line.shippingMethodId,
+        toName: invoice.buyerName,
         toAddress: {
           street: invoice.shippingStreet,
           postalCode: invoice.shippingPostalCode,

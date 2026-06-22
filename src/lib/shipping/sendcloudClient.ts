@@ -1,12 +1,14 @@
-// Client Sendcloud — devis (gratuit/sans quota), création et annulation de colis.
+// Client Sendcloud — câblé sur l'API réelle :
+//  - devis  : v3 `shipping-options` (POST, `calculate_quotes: true`) — gratuit/sans quota ;
+//  - colis  : v3 `shipments/announce-with-shipping-rules` (POST) — génère l'étiquette ;
+//  - annul. : v2 `parcels/{id}/cancel` (POST) — best-effort (spec §3.E, décisions #4/#6).
+// Clés + adresse expéditeur via getSendcloudConfig (validé au boot). SHIPPING_TEST_MODE
+// force l'option gratuite `sendcloud:letter` (validation sans facturation).
 //
-// Devis (`getShippingRates`) : CÂBLÉ sur l'API v3 « shipping options » (POST, avec
-// `calculate_quotes: true`). Création/annulation : DIFFÉRÉES (stub `NOT_WIRED`) — à câbler
-// sur v3 shipments (createParcel, pour réutiliser le `shipping_option_code`) et v2
-// `/parcels/{id}/cancel` (cancelParcel). Décisions #4/#6 tranchées (cf. spec §3.E / table).
-//
-// Les tests d'orchestration (cartShipping.test.ts) mockent ce module ; la logique de
-// parsing des offres est isolée et testée à part (parseShippingOptions, pur).
+// Les tests d'orchestration (cartShipping.test.ts) mockent ce module ; les parties de
+// parsing pures sont testées à part (parseShippingOptions, parseCreatedParcelId).
+
+import { getSendcloudConfig } from "./sendcloudConfig"
 
 export type AddressInput = {
   street: string
@@ -22,18 +24,11 @@ export type ShippingRate = {
   priceHTCents: number
 }
 
-const NOT_WIRED =
-  "Client Sendcloud non câblé (cf. docs/B14-shipping-spec.md §7)"
-
 const SENDCLOUD_BASE = "https://panel.sendcloud.sc/api"
 
 function authHeader(): string {
-  const pub = process.env.SENDCLOUD_PUBLIC_KEY
-  const secret = process.env.SENDCLOUD_SECRET_KEY
-  if (!pub || !secret) {
-    throw new Error("SENDCLOUD_PUBLIC_KEY / SENDCLOUD_SECRET_KEY manquants")
-  }
-  return "Basic " + Buffer.from(`${pub}:${secret}`).toString("base64")
+  const { publicKey, secretKey } = getSendcloudConfig()
+  return "Basic " + Buffer.from(`${publicKey}:${secretKey}`).toString("base64")
 }
 
 // Sendcloud attend un code pays ISO 3166-1 alpha-2 ; nos adresses stockent le pays en
@@ -111,14 +106,15 @@ export async function getShippingRates(args: {
   heightCm: number
   toAddress: AddressInput
 }): Promise<ShippingRate[]> {
+  const from = getSendcloudConfig().from
   const res = await fetch(`${SENDCLOUD_BASE}/v3/shipping-options`, {
     method: "POST",
     headers: { Authorization: authHeader(), "Content-Type": "application/json" },
     body: JSON.stringify({
       calculate_quotes: true,
       from_address: {
-        country_code: process.env.SENDCLOUD_FROM_COUNTRY || "FR",
-        postal_code: process.env.SENDCLOUD_FROM_POSTAL_CODE || undefined,
+        country_code: from.countryCode,
+        postal_code: from.postalCode,
       },
       to_address: {
         country_code: toCountryCode(args.toAddress.country),
@@ -148,27 +144,99 @@ export async function getShippingRates(args: {
   return parseShippingOptions(await res.json())
 }
 
+// Adresse expéditeur (origine des colis) au format Sendcloud, depuis la config validée.
+function senderAddressPayload() {
+  const from = getSendcloudConfig().from
+  return {
+    name: from.name,
+    address_line_1: from.addressLine1,
+    house_number: from.houseNumber ?? undefined,
+    postal_code: from.postalCode,
+    city: from.city,
+    country_code: from.countryCode,
+  }
+}
+
+type CreatedShipmentResponse = {
+  data?: { parcels?: { id?: number | string }[] }
+}
+
+/** Extrait l'id de colis de la réponse v3 « announce ». Pur → testable sans réseau. */
+export function parseCreatedParcelId(json: CreatedShipmentResponse): string {
+  const id = json?.data?.parcels?.[0]?.id
+  if (id === undefined || id === null || id === "") {
+    throw new Error("Réponse Sendcloud sans id de colis")
+  }
+  return String(id) // l'API renvoie un nombre ; on stocke en String (shippingParcelId)
+}
+
 /**
- * Création du colis réel (consomme le quota/coût) — appelée APRÈS confirmation du
- * paiement (webhook, EPIC 3bis), jamais au devis. À câbler sur l'API v3 shipments
- * (réutilise le `shipping_option_code` gelé) + SHIPPING_TEST_MODE.
+ * Création + annonce du colis réel (génère l'étiquette = le coût) — appelée APRÈS
+ * paiement (webhook, EPIC 3bis), jamais au devis. Réutilise le `shipping_option_code`
+ * gelé. SHIPPING_TEST_MODE=true force l'option gratuite `sendcloud:letter` (validation
+ * du pipeline sans facturation).
  */
-export async function createParcel(_args: {
+export async function createParcel(args: {
   shippingMethodId: string
+  toName: string
   toAddress: AddressInput
   weightKg: number
   lengthCm: number
   widthCm: number
   heightCm: number
 }): Promise<{ parcelId: string }> {
-  throw new Error(NOT_WIRED)
+  const testMode = process.env.SHIPPING_TEST_MODE === "true"
+  const shippingOptionCode = testMode ? "sendcloud:letter" : args.shippingMethodId
+
+  const res = await fetch(`${SENDCLOUD_BASE}/v3/shipments/announce-with-shipping-rules`, {
+    method: "POST",
+    headers: { Authorization: authHeader(), "Content-Type": "application/json" },
+    body: JSON.stringify({
+      from_address: senderAddressPayload(),
+      to_address: {
+        name: args.toName,
+        address_line_1: args.toAddress.street,
+        postal_code: args.toAddress.postalCode,
+        city: args.toAddress.city,
+        country_code: toCountryCode(args.toAddress.country),
+      },
+      parcels: [
+        {
+          weight: { value: String(args.weightKg), unit: "kg" },
+          dimensions: {
+            length: String(args.lengthCm),
+            width: String(args.widthCm),
+            height: String(args.heightCm),
+            unit: "cm",
+          },
+        },
+      ],
+      ship_with: {
+        type: "shipping_option_code",
+        properties: { shipping_option_code: shippingOptionCode },
+      },
+    }),
+  })
+
+  if (!res.ok) {
+    const body = await res.text().catch(() => "")
+    throw new Error(`Sendcloud announce ${res.status}: ${body.slice(0, 300)}`)
+  }
+
+  return { parcelId: parseCreatedParcelId(await res.json()) }
 }
 
 /**
- * Annulation d'une étiquette réservée (miroir de createParcel) — appelée par refundSale
- * sur remboursement avant expédition, best-effort, pour récupérer le coût (spec §3.E, #6).
- * À câbler sur v2 `POST /parcels/{id}/cancel`.
+ * Annulation d'une étiquette réservée — appelée par refundSale sur remboursement avant
+ * expédition, best-effort, pour récupérer le coût (spec §3.E, #6). 200 = annulé,
+ * 202 = annulation asynchrone acceptée ; tout autre code lève (le best-effort amont gère).
  */
-export async function cancelParcel(_parcelId: string): Promise<{ cancelled: boolean }> {
-  throw new Error(NOT_WIRED)
+export async function cancelParcel(parcelId: string): Promise<{ cancelled: boolean }> {
+  const res = await fetch(`${SENDCLOUD_BASE}/v2/parcels/${parcelId}/cancel`, {
+    method: "POST",
+    headers: { Authorization: authHeader(), "Content-Type": "application/json" },
+  })
+  if (res.status === 200 || res.status === 202) return { cancelled: true }
+  const body = await res.text().catch(() => "")
+  throw new Error(`Sendcloud cancel ${res.status}: ${body.slice(0, 300)}`)
 }

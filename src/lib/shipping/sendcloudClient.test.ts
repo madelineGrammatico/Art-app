@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest"
-import { parseShippingOptions } from "./sendcloudClient"
+import { parseShippingOptions, parseCreatedParcelId } from "./sendcloudClient"
 
 // Fixture calquée sur la vraie réponse v3 `shipping-options` (calculate_quotes: true).
 // On vérifie le filtrage MVP home-delivery + le mapping prix → centimes.
@@ -64,5 +64,17 @@ describe("parseShippingOptions", () => {
   it("gère une réponse vide sans casser", () => {
     expect(parseShippingOptions({ data: [] })).toEqual([])
     expect(parseShippingOptions({})).toEqual([])
+  })
+})
+
+describe("parseCreatedParcelId", () => {
+  it("extrait l'id du colis et le convertit en String", () => {
+    // L'API renvoie un id numérique (cf. sonde réelle).
+    expect(parseCreatedParcelId({ data: { parcels: [{ id: 674993226 }] } })).toBe("674993226")
+  })
+
+  it("lève si la réponse n'a pas d'id de colis", () => {
+    expect(() => parseCreatedParcelId({ data: { parcels: [] } })).toThrow()
+    expect(() => parseCreatedParcelId({})).toThrow()
   })
 })

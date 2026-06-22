@@ -11,5 +11,9 @@ export async function register() {
     // US1.1 (B14) — seuils transporteur standard (SHIPPING_MAX_*), requis pour le devis.
     const { getShippingConfig } = await import("@/src/lib/shipping/shippingConfig")
     getShippingConfig()
+
+    // B14 — config Sendcloud (clés API + adresse expéditeur), requise pour devis/colis.
+    const { getSendcloudConfig } = await import("@/src/lib/shipping/sendcloudConfig")
+    getSendcloudConfig()
   }
 }

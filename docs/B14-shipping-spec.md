@@ -7,9 +7,10 @@ Contrats figés pour écrire les tests, puis l'implémentation. Découle des use
 [webhook/route.ts](../app/api/stripe/webhook/route.ts)). Modèle sur
 [B13-invoice-spec.md](B13-invoice-spec.md).
 
-> Statut : **code applicatif implémenté + testé** (couche pure, DB, UI livraison/retrait ; cf.
-> [ROADMAP.md](../ROADMAP.md)). Reste le câblage réel de Sendcloud (hors-code §7) + l'UI multi-offres
-> US2.4. Décisions ouvertes #4 et #6 tranchées après vérification de la doc Sendcloud (juin 2026).
+> Statut : **implémenté, testé, et Sendcloud câblé + vérifié en réel** (juin 2026) — devis v3, création de
+> colis v3, annulation v2 testés contre un vrai compte. Reste : poser les valeurs d'env en prod, l'UI
+> multi-offres US2.4 (défaut curé en place), et les CGV rétractation (juriste). Décisions #4/#6 tranchées.
+> Détail & restes → [ROADMAP.md](../ROADMAP.md).
 
 ---
 

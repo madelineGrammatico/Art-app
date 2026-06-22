@@ -54,8 +54,10 @@ Prévu **après** la couverture de tests (déjà en place). Mérite sa propre br
 > User stories (toutes décisions tranchées) : [docs/B14-shipping-user-stories.md](docs/B14-shipping-user-stories.md).
 > Spec technique (contrats Prisma, cycle de vie, signatures) : [docs/B14-shipping-spec.md](docs/B14-shipping-spec.md).
 
-**Statut : code applicatif complet (TDD, tests verts).** Reste = prérequis hors-code (compte Sendcloud) +
-1 écran UI qui en dépend. Détail ci-dessous.
+**Statut : code applicatif complet + Sendcloud câblé et vérifié en réel (juin 2026).** Devis (v3
+`shipping-options`), création de colis (v3 `shipments/announce`) et annulation (v2 `parcels/{id}/cancel`)
+testés contre un vrai compte. Reste = poser les valeurs d'env en prod + l'écran multi-offres (US2.4) + CGV.
+Détail ci-dessous.
 
 **✅ Fait (implémenté + testé) :**
 - **Couche pure** (`src/lib/shipping/`) : `shippingConfig` (seuils env validés au boot via `instrumentation.ts`),
@@ -72,17 +74,21 @@ Prévu **après** la couverture de tests (déjà en place). Mérite sa propre br
 - **Mails** : `shippingIncidentAdminMail`, `pickupCoordinationUserMail`.
 - **UI checkout (EPIC E, US1bis)** : choix Livraison/Retrait, adresse de livraison conditionnelle,
   verrouillage retrait si œuvre hors gabarit.
+- **Client Sendcloud câblé** (`sendcloudClient`) + `sendcloudConfig` (clés + adresse expéditeur, validés au
+  boot) : `getShippingRates` (v3, filtrage home-delivery), `createParcel` (v3, `SHIPPING_TEST_MODE` →
+  `sendcloud:letter` gratuit), `cancelParcel` (v2). `selectPreferredRate` = défaut curé (signature →
+  home → moins cher). Décisions #4/#6 tranchées (cf. spec).
 
 **⏳ Reste à faire :**
-- **Hors-code (spec §7), bloquant prod** : créer le compte Sendcloud + clés, **câbler `sendcloudClient`**
-  (aujourd'hui stub `NOT_WIRED` qui lève — le checkout DELIVERY renvoie donc 400 tant que ce n'est pas fait ;
-  seul le PICKUP marche de bout en bout) ; env `SHIPPING_MAX_WEIGHT_KG` / `SHIPPING_MAX_DIMENSION_SUM_CM`
-  (dev + prod) ; CGV information rétractation (juriste).
-- **UI sélection transporteur multi-offres (US2.4)** : gelée car elle suppose un endpoint de devis-preview
-  appelant Sendcloud. Les offres uniques sont déjà auto-sélectionnées ; seul le cas « plusieurs offres »
-  attend cet écran. À faire **après** le câblage Sendcloud.
-- **Décisions 🔶 #4 (price-lock) / #6 (cancelParcel réel) / #7 (flux retour)** : à reconfirmer face à la doc
-  Sendcloud au moment du câblage (cf. table « Décisions ouvertes » de la spec).
+- **Valeurs d'env à poser (dev + prod)** : `SENDCLOUD_PUBLIC_KEY`/`SENDCLOUD_SECRET_KEY`,
+  `SENDCLOUD_FROM_*` (adresse expéditeur), `SHIPPING_MAX_*`. Optionnels : `SHIPPING_TEST_MODE=true`
+  (étiquettes gratuites pour valider sans facturer), `SHIPPING_PREFERRED_OPTION_CODES`. Tout est validé au
+  boot (`instrumentation.ts`) sauf les deux optionnels.
+- **CGV information rétractation** (juriste) — bloquant prod (spec §7).
+- **UI sélection transporteur multi-offres (US2.4)** : non faite — défaut curé en place
+  (`selectPreferredRate`), l'acheteur ne choisit pas. Endpoint de devis-preview + écran de sélection à
+  ajouter si on veut laisser le choix au client.
+- **Décision 🔶 #7 (flux retour rétractation)** : manuel hors app en MVP (cf. spec §3.E).
 
 **Correction actée en spec (à ne pas réintroduire) :** `InvoiceLineItem.artworkId` reste **NOT NULL** même
 pour les lignes `SHIPPING` (1 colis = 1 œuvre, jamais de ligne shipping agrégée multi-œuvres) — la
