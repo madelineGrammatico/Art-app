@@ -15,14 +15,27 @@ model Artwork {
   title String
   price Decimal
 
+  // Données physiques requises pour le devis transporteur (B14 EPIC 0). Nullable :
+  // une œuvre existante sans ces valeurs = donnée manquante (≠ 0) → rejet au checkout
+  // (US0.2), jamais un calcul à 0 €. Pas de backfill possible (dimension inconnue).
+  weightKg Decimal?
+  lengthCm Decimal?
+  widthCm  Decimal?
+  heightCm Decimal?
+
+  // Recalculé à chaque create/update admin à partir des seuils courants (US0.1).
+  // Sert UNIQUEMENT à l'affichage admin (US5.1) ; peut devenir stale si la config
+  // change → JAMAIS la source de vérité au checkout (recalcul live, cf. spec §2).
+  requiresSpecialistCarrier Boolean @default(false)
+
   ownerId          String?
   owner            User?             @relation(fields: [ownerId], references: [id])
   invoiceLineItems InvoiceLineItem[]
   refundRecoveries RefundRecovery[]
-  certificateId String?      @unique
-  certificate   Certificate?
-  basketItems   BasketItem[]
-  createdAt     DateTime     @default(now())
+  certificateId    String?           @unique
+  certificate      Certificate?
+  basketItems      BasketItem[]
+  createdAt        DateTime          @default(now())
 
   @@index([ownerId])
 }
@@ -39,6 +52,20 @@ model Certificate {
 enum InvoiceType {
   SALE
   CREDIT_NOTE
+}
+
+// Mode de remise d'une commande (B14). DELIVERY = livraison transporteur,
+// PICKUP = retrait sur place. 1 seul mode par commande (jamais mixte par œuvre).
+enum FulfillmentMode {
+  DELIVERY
+  PICKUP
+}
+
+// Nature d'une ligne de facture (B14). ARTWORK = l'œuvre, SHIPPING = son colis.
+// 1 œuvre livrée = 2 lignes (ARTWORK + SHIPPING), même artworkId (cf. spec §0).
+enum InvoiceLineItemType {
+  ARTWORK
+  SHIPPING
 }
 
 // Compteur séquentiel sans trou pour la numérotation des factures (B13 EPIC 1).
@@ -109,6 +136,14 @@ model Invoice {
   // → rejouable si le webhook a crashé entre le commit et l'envoi (cf. webhook/route.ts).
   emailSentAt DateTime?
 
+  // Mode de remise (B14). @default(DELIVERY) : cohérent pour les factures passées,
+  // aucune n'avait de retrait sur place.
+  fulfillmentMode FulfillmentMode @default(DELIVERY)
+
+  // Idempotence de l'email de coordination retrait (US1bis.3), même pattern que
+  // emailSentAt. null tant que PICKUP n'a pas déclenché l'email ; non pertinent si DELIVERY.
+  pickupEmailSentAt DateTime?
+
   // Conservation 10 ans (US6.2) : aucune suppression dure. Pas de soft-delete dédié
   // (aucun cas métier de « masquage ») → garanti par l'absence d'action de suppression
   // + onDelete: Restrict sur InvoiceLineItem.invoice.
@@ -122,21 +157,28 @@ model Invoice {
   @@index([shippingAddressId])
 }
 
-// Une ligne de facture = une œuvre vendue (ou créditée sur un avoir).
+// Une ligne de facture : l'œuvre (ARTWORK) ou son colis (SHIPPING). artworkId reste
+// NOT NULL même pour SHIPPING (1 colis = 1 œuvre) → remboursement par œuvre trivial (spec §0).
 model InvoiceLineItem {
-  id          String  @id @default(uuid())
+  id          String              @id @default(uuid())
   invoiceId   String
-  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  invoice     Invoice             @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  type        InvoiceLineItemType @default(ARTWORK) // @default : lignes B13 existantes = ARTWORK
   artworkId   String
-  artwork     Artwork @relation(fields: [artworkId], references: [id])
-  label       String // snapshot du titre de l'œuvre à l'émission
+  artwork     Artwork             @relation(fields: [artworkId], references: [id])
+  label       String // snapshot du titre de l'œuvre / libellé transporteur à l'émission
   unitPriceHT Decimal
-  quantity    Int     @default(1)
+  quantity    Int                 @default(1)
   vatRate     Decimal // 0 en franchise, ex. 0.055 en assujetti 5,5 %
   vatAmount   Decimal
   lineTTC     Decimal
 
-  @@unique([invoiceId, artworkId])
+  // Renseignés uniquement quand type = SHIPPING :
+  shippingMethodId       String? // service transporteur retenu au devis (ex. id Sendcloud)
+  shippingParcelId       String? // colis créé chez le transporteur — idempotence EPIC 3bis
+  shippingParcelFailedAt DateTime? // échec de création post-paiement → alerte admin
+
+  @@unique([invoiceId, artworkId, type]) // autorise les 2 lignes (ARTWORK + SHIPPING) par œuvre
   @@index([artworkId])
 }
 

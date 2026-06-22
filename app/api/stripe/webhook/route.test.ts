@@ -20,6 +20,15 @@ vi.mock("@/src/lib/mail/checkoutRaceIncidentAdminMail", () => ({
 vi.mock("@/src/lib/mail/invoiceUserMail", () => ({
   sendInvoiceUserMail: vi.fn(),
 }))
+vi.mock("@/src/lib/mail/shippingIncidentAdminMail", () => ({
+  sendShippingIncidentAdminMail: vi.fn(),
+}))
+vi.mock("@/src/lib/mail/pickupCoordinationUserMail", () => ({
+  sendPickupCoordinationUserMail: vi.fn(),
+}))
+vi.mock("@/src/lib/shipping/sendcloudClient", () => ({
+  createParcel: vi.fn(),
+}))
 // Rendu PDF mocké : on ne veut pas générer un vrai PDF dans les tests du webhook
 // (testé à part dans invoicePdf.test.ts).
 vi.mock("@/src/lib/invoice/invoicePdf", () => ({
@@ -50,6 +59,9 @@ import { stripe } from "@/src/lib/stripe/stripe"
 import { sendRefundUserMail } from "@/src/lib/mail/refundUserMail"
 import { sendCheckoutRaceIncidentAdminMail } from "@/src/lib/mail/checkoutRaceIncidentAdminMail"
 import { sendInvoiceUserMail } from "@/src/lib/mail/invoiceUserMail"
+import { sendShippingIncidentAdminMail } from "@/src/lib/mail/shippingIncidentAdminMail"
+import { sendPickupCoordinationUserMail } from "@/src/lib/mail/pickupCoordinationUserMail"
+import { createParcel } from "@/src/lib/shipping/sendcloudClient"
 import { prisma } from "@/src/lib/prisma"
 import {
   createUser,
@@ -65,6 +77,9 @@ const mockedRefund = vi.mocked(stripe.refunds.create)
 const mockedUserMail = vi.mocked(sendRefundUserMail)
 const mockedAdminMail = vi.mocked(sendCheckoutRaceIncidentAdminMail)
 const mockedInvoiceMail = vi.mocked(sendInvoiceUserMail)
+const mockedShippingIncident = vi.mocked(sendShippingIncidentAdminMail)
+const mockedPickupMail = vi.mocked(sendPickupCoordinationUserMail)
+const mockedCreateParcel = vi.mocked(createParcel)
 
 type AddressBlob = {
   id: string
@@ -74,6 +89,13 @@ type AddressBlob = {
   country: string
 }
 
+type ShippingSelectionBlob = {
+  artworkId: string
+  shippingMethodId: string
+  label: string
+  unitPriceHTCents: number
+}
+
 function makeCheckoutCompletedEvent(args: {
   sessionId: string
   userId: string
@@ -81,6 +103,8 @@ function makeCheckoutCompletedEvent(args: {
   paymentIntentId?: string | null
   billingAddress?: AddressBlob
   shippingAddress?: AddressBlob
+  fulfillmentMode?: "DELIVERY" | "PICKUP"
+  shippingSelections?: ShippingSelectionBlob[]
 }): Stripe.Event {
   const metadata: Record<string, string> = {
     userId: args.userId,
@@ -91,6 +115,12 @@ function makeCheckoutCompletedEvent(args: {
   }
   if (args.shippingAddress) {
     metadata.shippingAddress = JSON.stringify(args.shippingAddress)
+  }
+  if (args.fulfillmentMode) {
+    metadata.fulfillmentMode = args.fulfillmentMode
+  }
+  if (args.shippingSelections) {
+    metadata.shippingSelections = JSON.stringify(args.shippingSelections)
   }
   return {
     id: "evt_test_" + args.sessionId,
@@ -150,6 +180,12 @@ beforeEach(() => {
   mockedAdminMail.mockResolvedValue({ ok: true, id: "msg_admin" })
   mockedInvoiceMail.mockReset()
   mockedInvoiceMail.mockResolvedValue({ ok: true, id: "msg_invoice" })
+  mockedShippingIncident.mockReset()
+  mockedShippingIncident.mockResolvedValue({ ok: true, id: "msg_ship_incident" })
+  mockedPickupMail.mockReset()
+  mockedPickupMail.mockResolvedValue({ ok: true, id: "msg_pickup" })
+  mockedCreateParcel.mockReset()
+  mockedCreateParcel.mockResolvedValue({ parcelId: "parcel_default" })
 })
 
 describe("POST /api/stripe/webhook", () => {
@@ -883,5 +919,201 @@ describe("POST /api/stripe/webhook", () => {
     expect(invoice?.billingCity).toBe("Bordeaux")
     expect(invoice?.shippingAddressId).toBe(shipping.id)
     expect(invoice?.shippingCity).toBe("Nice")
+  })
+
+  // --- B14 : livraison / retrait ---
+
+  const shippingAddressBlob = (id: string) => ({
+    id,
+    street: "10 av Foch",
+    postalCode: "75116",
+    city: "Paris",
+    country: "France",
+  })
+
+  it("DELIVERY: crée la ligne SHIPPING, réserve le colis et stampe shippingParcelId", async () => {
+    const buyer = await createUser({ email: "ship@test.local" })
+    const address = await createAddress({ userId: buyer.id })
+    const artwork = await createArtwork({
+      title: "Crépuscule",
+      price: 250,
+      weightKg: 5,
+      lengthCm: 40,
+      widthCm: 30,
+      heightCm: 20,
+    })
+    await createBasketWithItem({ userId: buyer.id, artworkId: artwork.id })
+    const sessionId = "cs_ship_delivery"
+
+    mockedCreateParcel.mockResolvedValue({ parcelId: "parcel_xyz" })
+    mockedVerify.mockResolvedValue(
+      makeCheckoutCompletedEvent({
+        sessionId,
+        userId: buyer.id,
+        artworkIds: [artwork.id],
+        paymentIntentId: "pi_ship",
+        shippingAddress: shippingAddressBlob(address.id),
+        fulfillmentMode: "DELIVERY",
+        shippingSelections: [
+          { artworkId: artwork.id, shippingMethodId: "sc_colissimo", label: "Livraison — Colissimo", unitPriceHTCents: 990 },
+        ],
+      })
+    )
+
+    const res = await POST(makeRequest())
+    expect(res.status).toBe(200)
+
+    const invoice = await saleInvoice(sessionId)
+    expect(invoice?.fulfillmentMode).toBe("DELIVERY")
+    expect(invoice?.lineItems).toHaveLength(2)
+    expect(Number(invoice?.totalTTC)).toBe(259.9) // 250 + 9.90, franchise
+
+    const shippingLine = invoice?.lineItems.find((l) => l.type === "SHIPPING")
+    expect(shippingLine?.artworkId).toBe(artwork.id)
+    expect(shippingLine?.shippingParcelId).toBe("parcel_xyz")
+    expect(shippingLine?.shippingParcelFailedAt).toBeNull()
+
+    expect(mockedCreateParcel).toHaveBeenCalledOnce()
+    expect(mockedCreateParcel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        shippingMethodId: "sc_colissimo",
+        weightKg: 5,
+        toAddress: expect.objectContaining({ city: "Paris" }),
+      })
+    )
+    expect(mockedShippingIncident).not.toHaveBeenCalled()
+  })
+
+  it("DELIVERY: échec de création du colis → marque shippingParcelFailedAt + alerte admin, sans crash", async () => {
+    const buyer = await createUser({ email: "shipfail@test.local" })
+    const address = await createAddress({ userId: buyer.id })
+    const artwork = await createArtwork({
+      title: "Aurore",
+      price: 100,
+      weightKg: 5,
+      lengthCm: 40,
+      widthCm: 30,
+      heightCm: 20,
+    })
+    await createBasketWithItem({ userId: buyer.id, artworkId: artwork.id })
+    const sessionId = "cs_ship_fail"
+
+    mockedCreateParcel.mockRejectedValue(new Error("Sendcloud 502"))
+    mockedVerify.mockResolvedValue(
+      makeCheckoutCompletedEvent({
+        sessionId,
+        userId: buyer.id,
+        artworkIds: [artwork.id],
+        paymentIntentId: "pi_ship_fail",
+        shippingAddress: shippingAddressBlob(address.id),
+        fulfillmentMode: "DELIVERY",
+        shippingSelections: [
+          { artworkId: artwork.id, shippingMethodId: "sc_1", label: "Livraison", unitPriceHTCents: 990 },
+        ],
+      })
+    )
+
+    const res = await POST(makeRequest())
+    expect(res.status).toBe(200) // pas de crash du webhook
+
+    const invoice = await saleInvoice(sessionId)
+    const shippingLine = invoice?.lineItems.find((l) => l.type === "SHIPPING")
+    expect(shippingLine?.shippingParcelId).toBeNull()
+    expect(shippingLine?.shippingParcelFailedAt).not.toBeNull()
+
+    expect(mockedShippingIncident).toHaveBeenCalledOnce()
+    expect(mockedShippingIncident).toHaveBeenCalledWith(
+      expect.objectContaining({
+        invoiceId: invoice?.id,
+        artworkId: artwork.id,
+        error: "Sendcloud 502",
+      })
+    )
+  })
+
+  it("DELIVERY: rejeu du webhook ne recrée pas un colis déjà réservé (idempotence)", async () => {
+    const buyer = await createUser({ email: "shipidem@test.local" })
+    const address = await createAddress({ userId: buyer.id })
+    const artwork = await createArtwork({
+      price: 100,
+      weightKg: 5,
+      lengthCm: 40,
+      widthCm: 30,
+      heightCm: 20,
+    })
+    await createBasketWithItem({ userId: buyer.id, artworkId: artwork.id })
+    const sessionId = "cs_ship_idem"
+
+    const event = makeCheckoutCompletedEvent({
+      sessionId,
+      userId: buyer.id,
+      artworkIds: [artwork.id],
+      paymentIntentId: "pi_ship_idem",
+      shippingAddress: shippingAddressBlob(address.id),
+      fulfillmentMode: "DELIVERY",
+      shippingSelections: [
+        { artworkId: artwork.id, shippingMethodId: "sc_1", label: "Livraison", unitPriceHTCents: 500 },
+      ],
+    })
+
+    mockedVerify.mockResolvedValue(event)
+    await POST(makeRequest())
+    mockedVerify.mockResolvedValue(event)
+    await POST(makeRequest())
+
+    expect(mockedCreateParcel).toHaveBeenCalledOnce() // pas deux fois
+  })
+
+  it("PICKUP: aucune ligne SHIPPING ni colis, envoie l'email de coordination + stampe pickupEmailSentAt", async () => {
+    const buyer = await createUser({ email: "pickup@test.local" })
+    const artwork = await createArtwork({ title: "Statue", price: 100 })
+    await createBasketWithItem({ userId: buyer.id, artworkId: artwork.id })
+    const sessionId = "cs_pickup"
+
+    mockedVerify.mockResolvedValue(
+      makeCheckoutCompletedEvent({
+        sessionId,
+        userId: buyer.id,
+        artworkIds: [artwork.id],
+        paymentIntentId: "pi_pickup",
+        fulfillmentMode: "PICKUP",
+      })
+    )
+
+    const res = await POST(makeRequest())
+    expect(res.status).toBe(200)
+
+    const invoice = await saleInvoice(sessionId)
+    expect(invoice?.fulfillmentMode).toBe("PICKUP")
+    expect(invoice?.lineItems).toHaveLength(1)
+    expect(invoice?.pickupEmailSentAt).not.toBeNull()
+
+    expect(mockedCreateParcel).not.toHaveBeenCalled()
+    expect(mockedPickupMail).toHaveBeenCalledOnce()
+    expect(mockedPickupMail).toHaveBeenCalledWith(
+      expect.objectContaining({ to: "pickup@test.local", artworkTitles: ["Statue"] })
+    )
+  })
+
+  it("PICKUP: rejeu du webhook ne renvoie pas l'email de coordination (pickupEmailSentAt)", async () => {
+    const buyer = await createUser({ email: "pickupidem@test.local" })
+    const artwork = await createArtwork({ price: 100 })
+    await createBasketWithItem({ userId: buyer.id, artworkId: artwork.id })
+    const sessionId = "cs_pickup_idem"
+
+    const event = makeCheckoutCompletedEvent({
+      sessionId,
+      userId: buyer.id,
+      artworkIds: [artwork.id],
+      paymentIntentId: "pi_pickup_idem",
+      fulfillmentMode: "PICKUP",
+    })
+
+    mockedVerify.mockResolvedValue(event)
+    await POST(makeRequest())
+    mockedVerify.mockResolvedValue(event)
+    await POST(makeRequest())
+
+    expect(mockedPickupMail).toHaveBeenCalledOnce()
   })
 })

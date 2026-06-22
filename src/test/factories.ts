@@ -12,13 +12,27 @@ export async function createUser(overrides: Partial<{ email: string; role: "ADMI
 }
 
 export async function createArtwork(
-  overrides: Partial<{ title: string; price: number; ownerId: string | null }> = {}
+  overrides: Partial<{
+    title: string
+    price: number
+    ownerId: string | null
+    weightKg: number
+    lengthCm: number
+    widthCm: number
+    heightCm: number
+    requiresSpecialistCarrier: boolean
+  }> = {}
 ) {
   return prisma.artwork.create({
     data: {
       title: overrides.title ?? `Artwork ${randomUUID().slice(0, 8)}`,
       price: overrides.price ?? 100,
       ownerId: overrides.ownerId ?? null,
+      weightKg: overrides.weightKg ?? null,
+      lengthCm: overrides.lengthCm ?? null,
+      widthCm: overrides.widthCm ?? null,
+      heightCm: overrides.heightCm ?? null,
+      requiresSpecialistCarrier: overrides.requiresSpecialistCarrier ?? false,
     },
   })
 }
