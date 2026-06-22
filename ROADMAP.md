@@ -54,8 +54,35 @@ Prévu **après** la couverture de tests (déjà en place). Mérite sa propre br
 > User stories (toutes décisions tranchées) : [docs/B14-shipping-user-stories.md](docs/B14-shipping-user-stories.md).
 > Spec technique (contrats Prisma, cycle de vie, signatures) : [docs/B14-shipping-spec.md](docs/B14-shipping-spec.md).
 
-**Statut : spec technique validée.** Prochaine étape : **implémentation + tests**, dans l'ordre des EPIC
-(0 → 1 → 1bis → 2 → 3 → 3bis → 4 → 5, cf. user stories), sur le modèle TDD de B13.
+**Statut : code applicatif complet (TDD, tests verts).** Reste = prérequis hors-code (compte Sendcloud) +
+1 écran UI qui en dépend. Détail ci-dessous.
+
+**✅ Fait (implémenté + testé) :**
+- **Couche pure** (`src/lib/shipping/`) : `shippingConfig` (seuils env validés au boot via `instrumentation.ts`),
+  `thresholds` (`exceedsStandardThresholds` + `computeRequiresSpecialistCarrier`), `cartShipping`
+  (`computeCartShipping` : éligibilité, devis par œuvre, jamais 0 €).
+- **Migration** `b14_shipping` : dims/poids + `requiresSpecialistCarrier` sur `Artwork` ; enums
+  `FulfillmentMode`/`InvoiceLineItemType` ; `fulfillmentMode`/`pickupEmailSentAt` sur `Invoice` ;
+  `type`+`shipping*` sur `InvoiceLineItem` ; `@@unique([invoiceId, artworkId, type])`.
+- **Couche DB** : `emitSaleInvoice` (lignes SHIPPING + TVA) ; webhook (`createParcelsForInvoice` post-commit
+  idempotent + `sendPickupCoordinationEmail`) ; `refundSale`/`emitCreditNote` (crédite ARTWORK+SHIPPING,
+  corrige le bug de `Map` par artworkId, `cancelParcel` best-effort) ; `create-checkout-session`
+  (`computeCartShipping`, devis gelé en metadata + lignes Stripe, rejets 400).
+- **Flag spécialiste (US0.1/US5.1)** : recalcul à la création/édition d'œuvre + champs dims & bandeau sur le form admin.
+- **Mails** : `shippingIncidentAdminMail`, `pickupCoordinationUserMail`.
+- **UI checkout (EPIC E, US1bis)** : choix Livraison/Retrait, adresse de livraison conditionnelle,
+  verrouillage retrait si œuvre hors gabarit.
+
+**⏳ Reste à faire :**
+- **Hors-code (spec §7), bloquant prod** : créer le compte Sendcloud + clés, **câbler `sendcloudClient`**
+  (aujourd'hui stub `NOT_WIRED` qui lève — le checkout DELIVERY renvoie donc 400 tant que ce n'est pas fait ;
+  seul le PICKUP marche de bout en bout) ; env `SHIPPING_MAX_WEIGHT_KG` / `SHIPPING_MAX_DIMENSION_SUM_CM`
+  (dev + prod) ; CGV information rétractation (juriste).
+- **UI sélection transporteur multi-offres (US2.4)** : gelée car elle suppose un endpoint de devis-preview
+  appelant Sendcloud. Les offres uniques sont déjà auto-sélectionnées ; seul le cas « plusieurs offres »
+  attend cet écran. À faire **après** le câblage Sendcloud.
+- **Décisions 🔶 #4 (price-lock) / #6 (cancelParcel réel) / #7 (flux retour)** : à reconfirmer face à la doc
+  Sendcloud au moment du câblage (cf. table « Décisions ouvertes » de la spec).
 
 **Correction actée en spec (à ne pas réintroduire) :** `InvoiceLineItem.artworkId` reste **NOT NULL** même
 pour les lignes `SHIPPING` (1 colis = 1 œuvre, jamais de ligne shipping agrégée multi-œuvres) — la

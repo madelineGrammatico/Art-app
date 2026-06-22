@@ -5,7 +5,7 @@ import Link from "next/link"
 import { Card } from "@/src/components/ui/card"
 import { Button } from "@/src/components/ui/button"
 import { Separator } from "@/src/components/ui/separator"
-import { Building2, Truck, Plus } from "lucide-react"
+import { Building2, Truck, Plus, Store } from "lucide-react"
 import CheckoutButton from "./CheckoutButton"
 import AddressForm, { SavedAddress } from "@/src/components/address/AddressForm"
 
@@ -13,14 +13,22 @@ type Props = {
   userId: string
   addresses: SavedAddress[]
   total: number
+  // Indice serveur (flag stocké) : false si au moins une œuvre est hors gabarit
+  // transporteur standard → retrait sur place imposé. Le devis live au checkout
+  // reste l'autorité (spec §2) ; ce booléen ne sert qu'à l'UX.
+  deliveryAvailable: boolean
 }
 
 export default function CheckoutPanel({
   userId,
   addresses: initialAddresses,
   total,
+  deliveryAvailable,
 }: Props) {
   const [addresses, setAddresses] = useState<SavedAddress[]>(initialAddresses)
+  const [fulfillmentMode, setFulfillmentMode] = useState<"DELIVERY" | "PICKUP">(
+    deliveryAvailable ? "DELIVERY" : "PICKUP"
+  )
 
   // When the user lands at checkout with no address, surface the form
   // immediately — the redirect to /profile/addresses used to break the
@@ -56,7 +64,11 @@ export default function CheckoutPanel({
   }
 
   const effectiveShippingId = sameAsBilling ? billingId : shippingId
-  const canPay = !!billingId && !!effectiveShippingId
+  // Retrait : seule l'adresse de facturation est requise (US1bis). Livraison : les deux.
+  const canPay =
+    fulfillmentMode === "PICKUP"
+      ? !!billingId
+      : !!billingId && !!effectiveShippingId
 
   // Empty state: inline form (no cancel, no escape — user must add to
   // proceed), with a fallback link back to the basket.
@@ -87,6 +99,65 @@ export default function CheckoutPanel({
 
   return (
     <div className="flex flex-col gap-4">
+      <Card className="p-6 bg-white">
+        <h3 className="text-lg font-semibold mb-4">Mode de remise</h3>
+        {!deliveryAvailable && (
+          <p className="text-sm text-amber-900 mb-3">
+            Une ou plusieurs œuvres sont hors gabarit transporteur standard
+            (volumineuses/fragiles) : seul le retrait sur place est possible.
+          </p>
+        )}
+        <div className="grid grid-cols-2 gap-3">
+          <label
+            className={`flex items-center gap-3 border rounded-lg p-3 transition ${
+              !deliveryAvailable
+                ? "border-slate-200 opacity-50 cursor-not-allowed"
+                : fulfillmentMode === "DELIVERY"
+                  ? "border-blue-500 bg-blue-50 cursor-pointer"
+                  : "border-slate-200 hover:border-slate-300 cursor-pointer"
+            }`}
+          >
+            <input
+              type="radio"
+              name="fulfillmentMode"
+              value="DELIVERY"
+              checked={fulfillmentMode === "DELIVERY"}
+              disabled={!deliveryAvailable}
+              onChange={() => setFulfillmentMode("DELIVERY")}
+            />
+            <span className="flex items-center gap-2 text-sm text-slate-700">
+              <Truck className="w-4 h-4 text-slate-600" />
+              Livraison
+            </span>
+          </label>
+          <label
+            className={`flex items-center gap-3 border rounded-lg p-3 cursor-pointer transition ${
+              fulfillmentMode === "PICKUP"
+                ? "border-blue-500 bg-blue-50"
+                : "border-slate-200 hover:border-slate-300"
+            }`}
+          >
+            <input
+              type="radio"
+              name="fulfillmentMode"
+              value="PICKUP"
+              checked={fulfillmentMode === "PICKUP"}
+              onChange={() => setFulfillmentMode("PICKUP")}
+            />
+            <span className="flex items-center gap-2 text-sm text-slate-700">
+              <Store className="w-4 h-4 text-slate-600" />
+              Retrait sur place
+            </span>
+          </label>
+        </div>
+        {fulfillmentMode === "PICKUP" && (
+          <p className="text-sm text-muted-foreground mt-3">
+            Retrait sur place : nous vous contacterons par email après paiement pour
+            convenir d'un rendez-vous.
+          </p>
+        )}
+      </Card>
+
       <Card className="p-6 bg-white">
         <h3 className="text-lg font-semibold flex items-center gap-2 mb-4">
           <Building2 className="w-5 h-5 text-slate-600" />
@@ -120,6 +191,7 @@ export default function CheckoutPanel({
         </div>
       </Card>
 
+      {fulfillmentMode === "DELIVERY" && (
       <Card className="p-6 bg-white">
         <div className="flex items-center justify-between mb-4 flex-wrap gap-2">
           <h3 className="text-lg font-semibold flex items-center gap-2">
@@ -172,6 +244,7 @@ export default function CheckoutPanel({
           </Link>
         </div>
       </Card>
+      )}
 
       {isAddingAddress ? (
         <Card className="p-6 bg-white border-2 border-blue-500 shadow-lg">
@@ -203,6 +276,7 @@ export default function CheckoutPanel({
           <CheckoutButton
             billingAddressId={billingId}
             shippingAddressId={effectiveShippingId}
+            fulfillmentMode={fulfillmentMode}
             disabled={!canPay}
           />
           <Link href="/profile/basket">

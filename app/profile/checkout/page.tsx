@@ -42,6 +42,12 @@ export default async function CheckoutPage() {
 
   const total = items.reduce((sum, it) => sum + it.amount, 0)
 
+  // Indice UX : livraison indisponible si au moins une œuvre est hors gabarit standard
+  // (flag stocké). Le devis live au checkout reste l'autorité (spec §2).
+  const deliveryAvailable = !(basket?.items ?? []).some(
+    (item) => item.artwork.requiresSpecialistCarrier
+  )
+
   if (items.length === 0) {
     return (
       <main className="w-full flex-1 mx-auto max-w-5xl px-4 py-8">
@@ -133,7 +139,12 @@ export default async function CheckoutPage() {
             </Card>
           ))}
 
-          <CheckoutPanel userId={userId} addresses={addresses} total={total} />
+          <CheckoutPanel
+            userId={userId}
+            addresses={addresses}
+            total={total}
+            deliveryAvailable={deliveryAvailable}
+          />
         </div>
       </section>
     </main>

@@ -6,12 +6,14 @@ import { Button } from "@/src/components/ui/button"
 type Props = {
   billingAddressId: string
   shippingAddressId: string
+  fulfillmentMode: "DELIVERY" | "PICKUP"
   disabled?: boolean
 }
 
 export default function CheckoutButton({
   billingAddressId,
   shippingAddressId,
+  fulfillmentMode,
   disabled,
 }: Props) {
   const [isLoading, setIsLoading] = useState(false)
@@ -27,7 +29,12 @@ export default function CheckoutButton({
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ billingAddressId, shippingAddressId }),
+        body: JSON.stringify({
+          billingAddressId,
+          fulfillmentMode,
+          // L'adresse de livraison n'est pertinente qu'en livraison.
+          ...(fulfillmentMode === "DELIVERY" ? { shippingAddressId } : {}),
+        }),
       })
 
       const data = await response.json()
