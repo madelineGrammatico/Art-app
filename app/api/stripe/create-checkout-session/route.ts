@@ -3,6 +3,7 @@ import { auth } from "@/src/lib/auth/auth"
 import { prisma } from "@/src/lib/prisma"
 import { stripe, CURRENCY } from "@/src/lib/stripe/stripe"
 import { computeCartShipping } from "@/src/lib/shipping/cartShipping"
+import { selectPreferredRate } from "@/src/lib/shipping/selectRate"
 
 export async function POST(request: NextRequest) {
   try {
@@ -164,17 +165,27 @@ export async function POST(request: NextRequest) {
         }
       }
 
+      // Préférence transporteur surchargeable sans redéploiement (sinon défaut curé).
+      const preferredCodes = process.env.SHIPPING_PREFERRED_OPTION_CODES
+        ?.split(",")
+        .map((s) => s.trim())
+        .filter(Boolean)
+
       for (const [artworkId, rates] of cart.quotesByArtwork) {
-        let chosen = rates.length === 1 ? rates[0] : undefined
-        if (!chosen) {
-          const selectedId = clientSelections.get(artworkId)
-          chosen = rates.find((r) => r.shippingMethodId === selectedId)
+        if (rates.length === 0) {
+          return NextResponse.json(
+            { error: `Aucune offre de livraison disponible pour l'œuvre ${artworkId}.` },
+            { status: 400 }
+          )
         }
+        // Si l'acheteur a choisi (US2.4, non utilisé en MVP) on l'honore ; sinon défaut curé.
+        const selectedId = clientSelections.get(artworkId)
+        const chosen = selectedId
+          ? rates.find((r) => r.shippingMethodId === selectedId)
+          : selectPreferredRate(rates, preferredCodes)
         if (!chosen) {
           return NextResponse.json(
-            {
-              error: `Plusieurs options de livraison disponibles : merci de choisir un transporteur (œuvre ${artworkId}).`,
-            },
+            { error: `Option de livraison invalide pour l'œuvre ${artworkId}.` },
             { status: 400 }
           )
         }

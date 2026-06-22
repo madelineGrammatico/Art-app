@@ -303,7 +303,7 @@ describe("POST /api/stripe/create-checkout-session", () => {
     expect(mockedCreateSession).not.toHaveBeenCalled()
   })
 
-  it("DELIVERY: plusieurs offres sans sélection client → 400", async () => {
+  it("DELIVERY: plusieurs offres sans sélection → défaut curé (signature si dispo)", async () => {
     const buyer = await createUser()
     const addr = await createAddress({ userId: buyer.id })
     const artwork = await createArtwork({ price: 100 })
@@ -315,18 +315,52 @@ describe("POST /api/stripe/create-checkout-session", () => {
         [
           artwork.id,
           [
-            { shippingMethodId: "sc_1", label: "Colissimo", priceHTCents: 990 },
-            { shippingMethodId: "sc_2", label: "Mondial Relay", priceHTCents: 590 },
+            { shippingMethodId: "mondial_relay:home_domestic,dualapi/c2c", label: "Mondial Relay Home", priceHTCents: 603 },
+            { shippingMethodId: "colissimo:home/fr", label: "Colissimo Home", priceHTCents: 1070 },
+            { shippingMethodId: "colissimo:home/signature,fr", label: "Colissimo Home Signature", priceHTCents: 1189 },
           ],
         ],
       ]),
     })
+    mockedCreateSession.mockResolvedValue({ id: "cs_curated", url: "https://x" } as never)
 
     const res = await POST(makeReq({ billingAddressId: addr.id, shippingAddressId: addr.id }))
 
-    expect(res.status).toBe(400)
-    expect((await res.json()).error).toMatch(/choisir un transporteur/i)
-    expect(mockedCreateSession).not.toHaveBeenCalled()
+    expect(res.status).toBe(200)
+    const callArg = mockedCreateSession.mock.calls[0]![0] as Stripe.Checkout.SessionCreateParams
+    const frozen = JSON.parse(callArg.metadata?.shippingSelections as string)
+    // Signature privilégiée malgré un prix plus élevé (œuvres fragiles/de valeur).
+    expect(frozen[0]).toEqual(
+      expect.objectContaining({ shippingMethodId: "colissimo:home/signature,fr", unitPriceHTCents: 1189 })
+    )
+  })
+
+  it("DELIVERY: plusieurs offres sans préférence connue → repli sur la moins chère", async () => {
+    const buyer = await createUser()
+    const addr = await createAddress({ userId: buyer.id })
+    const artwork = await createArtwork({ price: 100 })
+    await createBasketWithItems(buyer.id, [artwork.id])
+    mockedAuth.mockResolvedValue(sessionFor({ id: buyer.id }) as never)
+    mockedComputeShipping.mockResolvedValue({
+      eligible: true,
+      quotesByArtwork: new Map([
+        [
+          artwork.id,
+          [
+            { shippingMethodId: "sc_1", label: "Offre A", priceHTCents: 990 },
+            { shippingMethodId: "sc_2", label: "Offre B", priceHTCents: 590 },
+          ],
+        ],
+      ]),
+    })
+    mockedCreateSession.mockResolvedValue({ id: "cs_cheapest", url: "https://x" } as never)
+
+    const res = await POST(makeReq({ billingAddressId: addr.id, shippingAddressId: addr.id }))
+
+    expect(res.status).toBe(200)
+    const callArg = mockedCreateSession.mock.calls[0]![0] as Stripe.Checkout.SessionCreateParams
+    const frozen = JSON.parse(callArg.metadata?.shippingSelections as string)
+    expect(frozen[0]).toEqual(expect.objectContaining({ shippingMethodId: "sc_2", unitPriceHTCents: 590 }))
   })
 
   it("DELIVERY: plusieurs offres avec sélection client → gèle l'offre choisie", async () => {

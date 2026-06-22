@@ -7,8 +7,9 @@ Contrats figés pour écrire les tests, puis l'implémentation. Découle des use
 [webhook/route.ts](../app/api/stripe/webhook/route.ts)). Modèle sur
 [B13-invoice-spec.md](B13-invoice-spec.md).
 
-> Statut : **brouillon** — rien d'implémenté. Cette passe a fait remonter une incohérence dans les user
-> stories (§0) à valider avant de coder.
+> Statut : **code applicatif implémenté + testé** (couche pure, DB, UI livraison/retrait ; cf.
+> [ROADMAP.md](../ROADMAP.md)). Reste le câblage réel de Sendcloud (hors-code §7) + l'UI multi-offres
+> US2.4. Décisions ouvertes #4 et #6 tranchées après vérification de la doc Sendcloud (juin 2026).
 
 ---
 
@@ -400,6 +401,19 @@ Pas du ressort de l'implémentation, mais bloquants pour la mise en prod — à 
   retour (à charge client). ⚠️ Cadre donné de mémoire — **à faire confirmer par un juriste** avant prod.
 - **Compte Sendcloud** : créer le compte (plan gratuit suffisant au lancement, cf. recherche), connecter
   les transporteurs visés (Colissimo, Mondial Relay, Chronopost…), récupérer les clés API.
+- **Câbler `sendcloudClient` sur l'API v3** (vérifié juin 2026) : les comptes créés après le 13/04/2026
+  doivent utiliser l'**API v3**. Côté devis, l'endpoint v3 « shipping options » renvoie offres + prix en un
+  appel (en v2 il fallait lister les `shipping_methods` puis interroger le prix par id). Nos 3 fonctions
+  (`getShippingRates`/`createParcel`/`cancelParcel`) masquent la version → seul l'intérieur change.
+  - Note devis : le prix standard se calcule sur **poids + pays** ; les dimensions servent de seuil
+    d'éligibilité (déjà géré par `exceedsStandardThresholds`), pas d'entrée de prix. Le devis est un appel
+    **lecture seule gratuit** (ne crée pas d'étiquette).
+- **Tester sans frais ni vraie expédition** (pas de host sandbox séparé — même API que la prod) :
+  - **option « Unstamped letter »** (`shipping_option_code: "sendcloud:letter"`) à la création de colis :
+    aucune facturation. Idéal pour tester `createParcel` de bout en bout. Ne couvre pas les retours.
+  - **sinon créer puis annuler** l'étiquette avant la deadline (avant 23h59 le jour même = non facturé ;
+    remboursé si non expédié sous 42 j) — utile pour exercer `cancelParcel`.
+  - Le devis (`getShippingRates`) étant gratuit, il se teste directement.
 - **Variables d'env** :
   - `SHIPPING_MAX_WEIGHT_KG`, `SHIPPING_MAX_DIMENSION_SUM_CM` — seuils standard (validés au boot via
     `instrumentation.ts`, même pattern que `SELLER_*` ; valeurs de départ 25 kg / 150 cm).
@@ -415,8 +429,8 @@ Pas du ressort de l'implémentation, mais bloquants pour la mise en prod — à 
 | ✅ 1 | `artworkId` nullable sur SHIPPING (user stories) vs besoin remboursement par œuvre | **Décidé : NOT NULL**, cf. §0 — répercuté sur le doc user stories |
 | ✅ 2 | Pas de modèle `Shipment` dédié | **Décidé** : 3 champs sur `InvoiceLineItem` suffisent (§1) |
 | ✅ 3 | Staleness de `requiresSpecialistCarrier` si la config de seuils change | **Décidé** : champ stocké = affichage admin seulement ; calcul live au checkout fait foi (§2) |
-| 🔶 4 | Verrouillage de prix Sendcloud (devis → réservation) | Pas de mécanisme identifié côté API à ce stade ; prix gelé via metadata Stripe (§3.B), écart résiduel assumé (cf. user stories US3bis.2) — à reconfirmer en lisant la doc Sendcloud au moment de l'implé |
+| ✅ 4 | Verrouillage de prix Sendcloud (devis → réservation) | **Tranché (doc Sendcloud vérifiée juin 2026) : aucun mécanisme de lock.** Le prix du devis n'est pas garanti égal au prix final de l'étiquette (fixé à la création du colis) ; l'écart vient de la re-mesure transporteur (poids volumétrique). Notre parade reste la seule possible : prix gelé via metadata Stripe (§3.B) + validation stricte des dimensions (EPIC 0), écart résiduel assumé (US3bis.2) |
 | ✅ 5 | Échec de création de colis post-paiement : canal d'alerte admin | **Décidé** : mail dédié `sendShippingIncidentAdminMail` (§3.D), pas de réutilisation de `sendCheckoutRaceIncidentAdminMail` (B13, renommé depuis `sendIncidentAdminMail` — trop générique, câblé sur la race au checkout) |
-| 🔶 6 | Étiquette Sendcloud déjà réservée au moment d'un remboursement | **Proposé** : `refundSale` tente `cancelParcel(shippingParcelId)` (best-effort, hors transaction) pour récupérer le coût ; échec → coût aller enfoncé, perte assumée + alerte admin (§3.E). Aller toujours remboursé au client (L221-24) quoi qu'il arrive |
+| ✅ 6 | Étiquette Sendcloud déjà réservée au moment d'un remboursement | **Tranché (doc vérifiée) : l'endpoint existe (`POST /parcels/{id}/cancel`) mais l'annulation N'EST PAS garantie** — synchrone (200) ou asynchrone (202, surveillé 14 j), échoue si colis livré / déjà annulé / > 42 j, et dépend du transporteur. Coût récupéré uniquement si annulé **avant 23h59 le jour de création**. → confirme notre design : `cancelParcel` best-effort hors transaction, échec → log + `sendShippingIncidentAdminMail`, ne bloque jamais le remboursement (§3.E). Aller toujours remboursé (L221-24) |
 | 🔶 7 | Flux de retour des œuvres (rétractation) | **Proposé** : **manuel hors app en MVP** — frais de retour à la charge du client (L221-23), pas d'étiquette retour ni de suivi de renvoi modélisés. À revisiter si le volume le justifie (§3.E) |
 | ✅ 8 | Durée de vie de la session Stripe vs péremption du devis gelé | **Décidé : on garde 24 h** (défaut Stripe). Valeur faible (l'écart de prix vient surtout de la re-mesure transporteur, pas du temps) et un `expires_at` court nuit à l'UV d'un achat d'art délibéré. One-liner `expires_at` documenté en §3.B si l'écart s'avère significatif en usage réel |
