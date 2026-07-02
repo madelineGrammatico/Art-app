@@ -46,6 +46,20 @@ let cached: SendcloudConfig | null = null
 
 /** Config Sendcloud du process (mémoïsée). Appeler tôt (boot) pour fail-fast. */
 export function getSendcloudConfig(): SendcloudConfig {
-  if (!cached) cached = parseSendcloudConfig(process.env)
+  if (!cached) {
+    try {
+      cached = parseSendcloudConfig(process.env)
+    } catch (err) {
+      // Rethrow en Error simple : le message de ZodError est un getter en lecture seule,
+      // que Next tente de réécrire au boot → TypeError cryptique qui masque la vraie cause.
+      if (err instanceof z.ZodError) {
+        throw new Error(
+          "Configuration Sendcloud invalide : " +
+            err.issues.map((i) => `${i.path.join(".") || "?"} (${i.message})`).join(" ; ")
+        )
+      }
+      throw err
+    }
+  }
   return cached
 }

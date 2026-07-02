@@ -37,6 +37,19 @@ let cached: ShippingConfig | null = null
  * le démarrage si la config est absente/invalide — même posture que getSellerConfig.
  */
 export function getShippingConfig(): ShippingConfig {
-  if (!cached) cached = parseShippingConfig(process.env)
+  if (!cached) {
+    try {
+      cached = parseShippingConfig(process.env)
+    } catch (err) {
+      // Message ZodError = getter en lecture seule → rethrow en Error simple lisible.
+      if (err instanceof z.ZodError) {
+        throw new Error(
+          "Configuration shipping invalide : " +
+            err.issues.map((i) => `${i.path.join(".") || "?"} (${i.message})`).join(" ; ")
+        )
+      }
+      throw err
+    }
+  }
   return cached
 }
