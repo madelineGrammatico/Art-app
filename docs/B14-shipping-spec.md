@@ -102,8 +102,9 @@ Domicile"*).
 
 ## 2. Config seuils transporteur standard (EPIC 0/1)
 
-`src/lib/shipping/shippingConfig.ts` — même pattern que `sellerConfig.ts` (Zod, validé au boot via
-`instrumentation.ts`) :
+`src/lib/shipping/shippingConfig.ts` — même pattern Zod que `sellerConfig.ts`, mais validé
+**paresseusement** (à l'usage), **pas au boot** : c'est de la config de feature, une absence ne doit pas
+faire tomber tout le site (cf. décision d'archi ci-dessous) :
 
 ```ts
 export type ShippingConfig = {
@@ -112,8 +113,16 @@ export type ShippingConfig = {
 }
 
 export function parseShippingConfig(env: Record<string, string | undefined>): ShippingConfig
-export function getShippingConfig(): ShippingConfig // throw au boot si absent/invalide
+export function getShippingConfig(): ShippingConfig // lève (Error lisible) à l'usage si absent/invalide
 ```
+
+> **Décision d'archi (post-implé) : config de feature validée à l'usage, pas au boot.** `instrumentation.ts`
+> ne valide au démarrage que `SELLER_*` (config app-wide). `getShippingConfig`/`getSendcloudConfig` sont
+> appelés au point d'entrée de la feature (checkout, webhook, édition d'œuvre) → une config shipping
+> incomplète ne dégrade que la livraison/les colis, jamais tout le site. **`SELLER_*` reste au boot** :
+> consommé dans la transaction de paiement, un échec paresseux créerait un « payé mais rien livré » ; crasher
+> fort au boot (checkout inclus → personne ne paie) est le mode d'échec le plus sûr pour la config qui traite
+> l'argent. La garantie prod réelle = un check de config en CI/pré-déploiement (à ajouter).
 
 Env requis : `SHIPPING_MAX_WEIGHT_KG`, `SHIPPING_MAX_DIMENSION_SUM_CM` — valeurs de départ alignées sur le
 plus restrictif des transporteurs standards visés (cf. recherche : Mondial Relay 25 kg / 150 cm). Pas de
@@ -321,7 +330,7 @@ de changement de logique dans `emitSaleInvoice`.
 
 ```ts
 // src/lib/shipping/shippingConfig.ts
-export function getShippingConfig(): ShippingConfig // throw au boot si invalide
+export function getShippingConfig(): ShippingConfig // lève à l'usage si invalide (pas au boot, cf. §2)
 
 // src/lib/shipping/thresholds.ts
 export function exceedsStandardThresholds(artwork: ArtworkDimensions, config: ShippingConfig): boolean
@@ -416,8 +425,8 @@ Pas du ressort de l'implémentation, mais bloquants pour la mise en prod — à 
     remboursé si non expédié sous 42 j) — utile pour exercer `cancelParcel`.
   - Le devis (`getShippingRates`) étant gratuit, il se teste directement.
 - **Variables d'env** :
-  - `SHIPPING_MAX_WEIGHT_KG`, `SHIPPING_MAX_DIMENSION_SUM_CM` — seuils standard (validés au boot via
-    `instrumentation.ts`, même pattern que `SELLER_*` ; valeurs de départ 25 kg / 150 cm).
+  - `SHIPPING_MAX_WEIGHT_KG`, `SHIPPING_MAX_DIMENSION_SUM_CM` — seuils standard (validés **à l'usage**, pas
+    au boot — cf. §2 ; valeurs de départ 25 kg / 150 cm).
   - clés API Sendcloud (devis + création/annulation de colis).
   - non requises dans `.env.test` (Sendcloud mocké dans les tests, comme Stripe/Resend en B13).
 

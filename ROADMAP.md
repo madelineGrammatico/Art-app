@@ -60,7 +60,7 @@ testés contre un vrai compte. Reste = poser les valeurs d'env en prod + l'écra
 Détail ci-dessous.
 
 **✅ Fait (implémenté + testé) :**
-- **Couche pure** (`src/lib/shipping/`) : `shippingConfig` (seuils env validés au boot via `instrumentation.ts`),
+- **Couche pure** (`src/lib/shipping/`) : `shippingConfig` (seuils env, `getShippingConfig` mémoïsé),
   `thresholds` (`exceedsStandardThresholds` + `computeRequiresSpecialistCarrier`), `cartShipping`
   (`computeCartShipping` : éligibilité, devis par œuvre, jamais 0 €).
 - **Migration** `b14_shipping` : dims/poids + `requiresSpecialistCarrier` sur `Artwork` ; enums
@@ -74,16 +74,22 @@ Détail ci-dessous.
 - **Mails** : `shippingIncidentAdminMail`, `pickupCoordinationUserMail`.
 - **UI checkout (EPIC E, US1bis)** : choix Livraison/Retrait, adresse de livraison conditionnelle,
   verrouillage retrait si œuvre hors gabarit.
-- **Client Sendcloud câblé** (`sendcloudClient`) + `sendcloudConfig` (clés + adresse expéditeur, validés au
-  boot) : `getShippingRates` (v3, filtrage home-delivery), `createParcel` (v3, `SHIPPING_TEST_MODE` →
+- **Client Sendcloud câblé** (`sendcloudClient`) + `sendcloudConfig` (clés + adresse expéditeur) :
+  `getShippingRates` (v3, filtrage home-delivery), `createParcel` (v3, `SHIPPING_TEST_MODE` →
   `sendcloud:letter` gratuit), `cancelParcel` (v2). `selectPreferredRate` = défaut curé (signature →
   home → moins cher). Décisions #4/#6 tranchées (cf. spec).
+- **Config shipping validée paresseusement, PAS au boot** (`instrumentation.ts` ne valide que `SELLER_*`) :
+  `getShippingConfig`/`getSendcloudConfig` sont appelés au point d'entrée de la feature (checkout, webhook,
+  édition d'œuvre). Une config shipping incomplète ne dégrade que la livraison/les colis, jamais tout le
+  site. (`SELLER_*` reste au boot : consommé dans la transaction de paiement → un échec « lazy » créerait un
+  « payé mais rien livré », donc crash fort au boot = mode d'échec plus sûr.)
 
 **⏳ Reste à faire :**
 - **Valeurs d'env à poser (dev + prod)** : `SENDCLOUD_PUBLIC_KEY`/`SENDCLOUD_SECRET_KEY`,
   `SENDCLOUD_FROM_*` (adresse expéditeur), `SHIPPING_MAX_*`. Optionnels : `SHIPPING_TEST_MODE=true`
-  (étiquettes gratuites pour valider sans facturer), `SHIPPING_PREFERRED_OPTION_CODES`. Tout est validé au
-  boot (`instrumentation.ts`) sauf les deux optionnels.
+  (étiquettes gratuites pour valider sans facturer), `SHIPPING_PREFERRED_OPTION_CODES`. Validées
+  paresseusement à l'usage (pas au boot) → une absence n'empêche pas l'app de démarrer, seule la feature
+  shipping échoue.
 - **CGV information rétractation** (juriste) — bloquant prod (spec §7).
 - **UI sélection transporteur multi-offres (US2.4)** : non faite — défaut curé en place
   (`selectPreferredRate`), l'acheteur ne choisit pas. Endpoint de devis-preview + écran de sélection à
