@@ -7,9 +7,9 @@ export type SendcloudConfig = {
   publicKey: string
   secretKey: string
   from: {
-    name: string
+    // Pas de nom ici : le nom d'expéditeur = SELLER_NAME (source unique, cf. sendcloudClient).
+    // Numéro de voie inclus dans addressLine1 (comme les adresses client, texte libre).
     addressLine1: string
-    houseNumber: string | null
     postalCode: string
     city: string
     countryCode: string
@@ -19,9 +19,7 @@ export type SendcloudConfig = {
 const schema = z.object({
   SENDCLOUD_PUBLIC_KEY: z.string().min(1, "SENDCLOUD_PUBLIC_KEY manquant"),
   SENDCLOUD_SECRET_KEY: z.string().min(1, "SENDCLOUD_SECRET_KEY manquant"),
-  SENDCLOUD_FROM_NAME: z.string().min(1, "SENDCLOUD_FROM_NAME manquant"),
   SENDCLOUD_FROM_ADDRESS_LINE_1: z.string().min(1, "SENDCLOUD_FROM_ADDRESS_LINE_1 manquant"),
-  SENDCLOUD_FROM_HOUSE_NUMBER: z.string().min(1).optional(),
   SENDCLOUD_FROM_POSTAL_CODE: z.string().min(1, "SENDCLOUD_FROM_POSTAL_CODE manquant"),
   SENDCLOUD_FROM_CITY: z.string().min(1, "SENDCLOUD_FROM_CITY manquant"),
   SENDCLOUD_FROM_COUNTRY: z
@@ -36,9 +34,7 @@ export function parseSendcloudConfig(env: Record<string, string | undefined>): S
     publicKey: parsed.SENDCLOUD_PUBLIC_KEY,
     secretKey: parsed.SENDCLOUD_SECRET_KEY,
     from: {
-      name: parsed.SENDCLOUD_FROM_NAME,
       addressLine1: parsed.SENDCLOUD_FROM_ADDRESS_LINE_1,
-      houseNumber: parsed.SENDCLOUD_FROM_HOUSE_NUMBER ?? null,
       postalCode: parsed.SENDCLOUD_FROM_POSTAL_CODE,
       city: parsed.SENDCLOUD_FROM_CITY,
       countryCode: parsed.SENDCLOUD_FROM_COUNTRY.toUpperCase(),

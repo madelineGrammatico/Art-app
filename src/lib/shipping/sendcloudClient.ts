@@ -9,6 +9,7 @@
 // parsing pures sont testées à part (parseShippingOptions, parseCreatedParcelId).
 
 import { getSendcloudConfig } from "./sendcloudConfig"
+import { getSellerConfig } from "@/src/lib/invoice/sellerConfig"
 
 export type AddressInput = {
   street: string
@@ -144,13 +145,13 @@ export async function getShippingRates(args: {
   return parseShippingOptions(await res.json())
 }
 
-// Adresse expéditeur (origine des colis) au format Sendcloud, depuis la config validée.
+// Adresse expéditeur (origine des colis) au format Sendcloud : nom = SELLER_NAME (source
+// unique), adresse structurée depuis la config Sendcloud.
 function senderAddressPayload() {
   const from = getSendcloudConfig().from
   return {
-    name: from.name,
+    name: getSellerConfig().name,
     address_line_1: from.addressLine1,
-    house_number: from.houseNumber ?? undefined,
     postal_code: from.postalCode,
     city: from.city,
     country_code: from.countryCode,
