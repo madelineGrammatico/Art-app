@@ -28,6 +28,11 @@ model Artwork {
   // change → JAMAIS la source de vérité au checkout (recalcul live, cf. spec §2).
   requiresSpecialistCarrier Boolean @default(false)
 
+  // Override manuel de l'admin, indépendant des dimensions (ex. œuvre fragile dans
+  // les seuils mais retrait imposé par choix commercial). Jamais recalculé
+  // automatiquement — contrairement à requiresSpecialistCarrier ci-dessus.
+  pickupOnly Boolean @default(false)
+
   ownerId          String?
   owner            User?             @relation(fields: [ownerId], references: [id])
   invoiceLineItems InvoiceLineItem[]

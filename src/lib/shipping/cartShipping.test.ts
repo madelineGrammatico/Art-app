@@ -27,9 +27,16 @@ const TO_ADDRESS = { street: "10 av Foch", postalCode: "75116", city: "Paris", c
 // `null` sur un champ simule une donnée physique manquante (US0.2).
 const item = (
   artworkId: string,
-  opts: { weightKg?: number | null; l?: number | null; w?: number | null; h?: number | null } = {}
+  opts: {
+    weightKg?: number | null
+    l?: number | null
+    w?: number | null
+    h?: number | null
+    pickupOnly?: boolean
+  } = {}
 ) => ({
   artworkId,
+  pickupOnly: opts.pickupOnly ?? false,
   weightKg: opts.weightKg === null ? null : new Prisma.Decimal(opts.weightKg ?? 5),
   lengthCm: opts.l === null ? null : new Prisma.Decimal(opts.l ?? 40),
   widthCm: opts.w === null ? null : new Prisma.Decimal(opts.w ?? 30),
@@ -111,6 +118,18 @@ describe("computeCartShipping", () => {
     if (res.eligible) throw new Error("attendu : non eligible")
     expect(res.blockingArtworkIds).toEqual(["big"])
     // Décision : choix livraison/retrait au niveau commande → aucun devis même pour l'œuvre standard.
+    expect(mockedRates).not.toHaveBeenCalled()
+  })
+
+  it("pickupOnly coché : non éligible même dans les seuils, aucun appel transporteur", async () => {
+    const res = await computeCartShipping({
+      items: [item("forced", { pickupOnly: true })],
+      toAddress: TO_ADDRESS,
+    })
+
+    expect(res.eligible).toBe(false)
+    if (res.eligible) throw new Error("attendu : non eligible")
+    expect(res.blockingArtworkIds).toEqual(["forced"])
     expect(mockedRates).not.toHaveBeenCalled()
   })
 

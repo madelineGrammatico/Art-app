@@ -5,6 +5,7 @@ import { prisma } from "@/src/lib/prisma"
 import { redirect } from "next/navigation"
 import { getShippingConfig } from "@/src/lib/shipping/shippingConfig"
 import { computeRequiresSpecialistCarrier } from "@/src/lib/shipping/thresholds"
+import { artworkDimensionsSchema } from "@/src/lib/shema"
 
 type ArtworkInput = {
     title: string
@@ -13,25 +14,40 @@ type ArtworkInput = {
     lengthCm?: number | null
     widthCm?: number | null
     heightCm?: number | null
+    pickupOnly?: boolean
 }
 
-// Une dimension n'est valide que strictement positive et finie ; sinon null
-// (donnée manquante, US0.2 — jamais 0, qui fausserait un futur devis).
-const cleanDim = (v: number | null | undefined): number | null =>
-    typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null
+type ParsedShippingFields = {
+    weightKg: number
+    lengthCm: number
+    widthCm: number
+    heightCm: number
+    pickupOnly: boolean
+    requiresSpecialistCarrier: boolean
+}
 
-// Dimensions nettoyées + flag transporteur spécialisé recalculé (US0.1). Le flag est
-// affichage admin uniquement ; le checkout recalcule en live (spec §2).
-function shippingFields(artwork: ArtworkInput) {
-    const dims = {
-        weightKg: cleanDim(artwork.weightKg),
-        lengthCm: cleanDim(artwork.lengthCm),
-        widthCm: cleanDim(artwork.widthCm),
-        heightCm: cleanDim(artwork.heightCm),
+// Poids/dimensions obligatoires (US0.1) : sans elles, aucun devis transporteur n'est
+// jamais possible (cf. artworkBlocksDelivery) → rejet explicite au lieu du silencieux
+// repli sur `null` d'avant B14 (une œuvre incomplète est un retrait forcé côté
+// checkout, pas un cas normal côté admin).
+function parseShippingFields(artwork: ArtworkInput): { error: string } | { data: ParsedShippingFields } {
+    const parsed = artworkDimensionsSchema.safeParse({
+        weightKg: artwork.weightKg,
+        lengthCm: artwork.lengthCm,
+        widthCm: artwork.widthCm,
+        heightCm: artwork.heightCm,
+        pickupOnly: Boolean(artwork.pickupOnly),
+    })
+    if (!parsed.success) {
+        return { error: parsed.error.issues[0].message }
     }
+    const { pickupOnly, ...dims } = parsed.data
     return {
-        ...dims,
-        requiresSpecialistCarrier: computeRequiresSpecialistCarrier(dims, getShippingConfig()),
+        data: {
+            ...dims,
+            pickupOnly,
+            requiresSpecialistCarrier: computeRequiresSpecialistCarrier(dims, getShippingConfig()),
+        },
     }
 }
 
@@ -44,12 +60,17 @@ export const createArtworkAction = async (artwork: ArtworkInput) => {
             // ||!session?.sessionToken 
             || session?.user.role !== "ADMIN"
         ) throw new Error("non authorisé")
-        
+
+        const shippingFields = parseShippingFields(artwork)
+        if ("error" in shippingFields) {
+            return { error: shippingFields.error }
+        }
+
         const newArtwork = await prisma.artwork.create({
             data: {
                 title: artwork.title,
                 price: artwork.price,
-                ...shippingFields(artwork),
+                ...shippingFields.data,
             }
         })
         await prisma.certificate.create({
@@ -78,6 +99,11 @@ export const editArtworkAction = async (id: string, artwork: ArtworkInput) => {
             || session?.user.role !== "ADMIN"
         ) throw new Error("non authorisé")
 
+        const shippingFields = parseShippingFields(artwork)
+        if ("error" in shippingFields) {
+            return { error: shippingFields.error }
+        }
+
         await prisma.artwork.update({
             where: {
                 id: id
@@ -85,7 +111,7 @@ export const editArtworkAction = async (id: string, artwork: ArtworkInput) => {
             data: {
                 title: artwork.title,
                 price: artwork.price,
-                ...shippingFields(artwork),
+                ...shippingFields.data,
             }
         })
     } catch {

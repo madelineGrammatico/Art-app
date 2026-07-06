@@ -26,11 +26,13 @@ export function ArtworkForm({artwork}: {artwork?: Artwork}) {
             widthCm: dimOrNull(FormData.get('widthCm')),
             heightCm: dimOrNull(FormData.get('heightCm')),
         }
+        const pickupOnly = FormData.get('pickupOnly') === 'on'
         if(artwork) {
             const json = await editArtworkAction(artwork.id, {
                 title: String(FormData.get('title')),
                 price: Number(FormData.get('price')),
                 ...dims,
+                pickupOnly,
             })
             error= json.error
         } else {
@@ -38,6 +40,7 @@ export function ArtworkForm({artwork}: {artwork?: Artwork}) {
                 title: String(FormData.get('title')),
                 price: Number(FormData.get('price')),
                 ...dims,
+                pickupOnly,
             })
             error= json.error
         }
@@ -83,7 +86,8 @@ export function ArtworkForm({artwork}: {artwork?: Artwork}) {
                         <Input
                             type="number"
                             step="0.01"
-                            min="0"
+                            min="0.01"
+                            required
                             defaultValue={artwork?.weightKg != null ? String(artwork.weightKg) : ""}
                             name="weightKg"
                             className="bg-white text-black"
@@ -94,7 +98,8 @@ export function ArtworkForm({artwork}: {artwork?: Artwork}) {
                         <Input
                             type="number"
                             step="0.1"
-                            min="0"
+                            min="0.1"
+                            required
                             defaultValue={artwork?.lengthCm != null ? String(artwork.lengthCm) : ""}
                             name="lengthCm"
                             className="bg-white text-black"
@@ -105,7 +110,8 @@ export function ArtworkForm({artwork}: {artwork?: Artwork}) {
                         <Input
                             type="number"
                             step="0.1"
-                            min="0"
+                            min="0.1"
+                            required
                             defaultValue={artwork?.widthCm != null ? String(artwork.widthCm) : ""}
                             name="widthCm"
                             className="bg-white text-black"
@@ -116,12 +122,27 @@ export function ArtworkForm({artwork}: {artwork?: Artwork}) {
                         <Input
                             type="number"
                             step="0.1"
-                            min="0"
+                            min="0.1"
+                            required
                             defaultValue={artwork?.heightCm != null ? String(artwork.heightCm) : ""}
                             name="heightCm"
                             className="bg-white text-black"
                         />
                     </Label>
+                    <Label className="flex items-center gap-2">
+                        <Input
+                            type="checkbox"
+                            name="pickupOnly"
+                            defaultChecked={artwork?.pickupOnly ?? false}
+                            className="h-4 w-4 shrink-0"
+                        />
+                        Retrait sur place uniquement (choix manuel, indépendant des dimensions)
+                    </Label>
+                    {artwork?.pickupOnly && (
+                        <p className="text-sm font-medium text-amber-900">
+                            ⚠️ Retrait sur place uniquement — choix manuel, la livraison est désactivée pour cette œuvre.
+                        </p>
+                    )}
                     {artwork?.requiresSpecialistCarrier && (
                         <p className="text-sm font-medium text-amber-900">
                             ⚠️ Hors gabarit transporteur standard — retrait sur place ou transporteur spécialisé.

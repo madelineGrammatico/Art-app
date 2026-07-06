@@ -1,6 +1,6 @@
 import { describe, it, expect } from "vitest"
 import { Prisma } from "@prisma/client"
-import { exceedsStandardThresholds, computeRequiresSpecialistCarrier } from "./thresholds"
+import { exceedsStandardThresholds, computeRequiresSpecialistCarrier, artworkBlocksDelivery } from "./thresholds"
 import type { ShippingConfig } from "./shippingConfig"
 
 // US1.1 — Détection « hors standard » : true si le poids OU la somme des dimensions
@@ -76,6 +76,41 @@ describe("computeRequiresSpecialistCarrier", () => {
         },
         config
       )
+    ).toBe(true)
+  })
+})
+
+describe("artworkBlocksDelivery", () => {
+  const complete = dims(5, 40, 30, 20) // dans les seuils
+
+  it("dimensions complètes, rien de coché → false (livraison possible)", () => {
+    expect(
+      artworkBlocksDelivery({ pickupOnly: false, requiresSpecialistCarrier: false, ...complete })
+    ).toBe(false)
+  })
+
+  it("pickupOnly coché manuellement → true, même dans les seuils", () => {
+    expect(
+      artworkBlocksDelivery({ pickupOnly: true, requiresSpecialistCarrier: false, ...complete })
+    ).toBe(true)
+  })
+
+  it("requiresSpecialistCarrier (hors seuils auto-détecté) → true", () => {
+    expect(
+      artworkBlocksDelivery({ pickupOnly: false, requiresSpecialistCarrier: true, ...complete })
+    ).toBe(true)
+  })
+
+  it("une dimension manquante → true (jamais de devis possible, cf. US0.2)", () => {
+    expect(
+      artworkBlocksDelivery({
+        pickupOnly: false,
+        requiresSpecialistCarrier: false,
+        weightKg: null,
+        lengthCm: complete.lengthCm,
+        widthCm: complete.widthCm,
+        heightCm: complete.heightCm,
+      })
     ).toBe(true)
   })
 })

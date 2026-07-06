@@ -21,6 +21,7 @@ export async function createArtwork(
     widthCm: number
     heightCm: number
     requiresSpecialistCarrier: boolean
+    pickupOnly: boolean
   }> = {}
 ) {
   return prisma.artwork.create({
@@ -33,6 +34,7 @@ export async function createArtwork(
       widthCm: overrides.widthCm ?? null,
       heightCm: overrides.heightCm ?? null,
       requiresSpecialistCarrier: overrides.requiresSpecialistCarrier ?? false,
+      pickupOnly: overrides.pickupOnly ?? false,
     },
   })
 }

@@ -117,6 +117,7 @@ export async function POST(request: NextRequest) {
         cart = await computeCartShipping({
           items: basket.items.map((item) => ({
             artworkId: item.artworkId,
+            pickupOnly: item.artwork.pickupOnly,
             weightKg: item.artwork.weightKg,
             lengthCm: item.artwork.lengthCm,
             widthCm: item.artwork.widthCm,

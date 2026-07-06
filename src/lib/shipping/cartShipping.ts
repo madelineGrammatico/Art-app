@@ -7,6 +7,7 @@ import { getShippingRates, type AddressInput, type ShippingRate } from "./sendcl
 // absente, gérée explicitement, US0.2).
 export type CartShippingItem = {
   artworkId: string
+  pickupOnly: boolean
   weightKg: Prisma.Decimal | null
   lengthCm: Prisma.Decimal | null
   widthCm: Prisma.Decimal | null
@@ -20,8 +21,9 @@ export type CartShippingResult =
 /**
  * Orchestration des devis au checkout (EPIC 1bis/2). Pour chaque œuvre du panier :
  *  1. dimensions manquantes → lève (US0.2, jamais un calcul à 0 €) ;
- *  2. si au moins une œuvre dépasse les seuils standard → toute la commande bascule en
- *     retrait (eligible=false), AUCUN devis transporteur n'est demandé (US1bis.2 — choix
+ *  2. si au moins une œuvre dépasse les seuils standard OU est marquée pickupOnly (override
+ *     manuel admin, indépendant des dimensions) → toute la commande bascule en retrait
+ *     (eligible=false), AUCUN devis transporteur n'est demandé (US1bis.2 — choix
  *     livraison/retrait au niveau commande, pas par œuvre) ;
  *  3. sinon, devis Sendcloud en parallèle (1 colis = 1 œuvre) ; un échec/timeout propage
  *     l'erreur, jamais de fallback 0 € (US2.1).
@@ -46,18 +48,21 @@ export async function computeCartShipping(args: {
     }
   }
 
-  // 2. Éligibilité livraison standard — calcul live (le flag stocké peut être stale, spec §2).
+  // 2. Éligibilité livraison standard — calcul live (le flag stocké peut être stale, spec §2),
+  //    plus l'override manuel pickupOnly (jamais recalculé, donc jamais stale par nature).
   const blockingArtworkIds = args.items
-    .filter((item) =>
-      exceedsStandardThresholds(
-        {
-          weightKg: item.weightKg!,
-          lengthCm: item.lengthCm!,
-          widthCm: item.widthCm!,
-          heightCm: item.heightCm!,
-        },
-        config
-      )
+    .filter(
+      (item) =>
+        item.pickupOnly ||
+        exceedsStandardThresholds(
+          {
+            weightKg: item.weightKg!,
+            lengthCm: item.lengthCm!,
+            widthCm: item.widthCm!,
+            heightCm: item.heightCm!,
+          },
+          config
+        )
     )
     .map((item) => item.artworkId)
 

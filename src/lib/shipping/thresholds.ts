@@ -66,3 +66,31 @@ export function computeRequiresSpecialistCarrier(
     config
   )
 }
+
+/**
+ * Règle unique « cette œuvre bloque la livraison » (retrait sur place obligatoire),
+ * utilisée à la fois par l'UX checkout (US1bis.2) et la garde serveur (cartShipping) :
+ * override manuel admin, hors-gabarit auto-détecté, ou dimensions incomplètes (une
+ * œuvre sans dimensions ne pourra de toute façon jamais recevoir de devis, US0.2).
+ */
+export function artworkBlocksDelivery(artwork: {
+  pickupOnly: boolean
+  requiresSpecialistCarrier: boolean
+  weightKg: MaybeDimension
+  lengthCm: MaybeDimension
+  widthCm: MaybeDimension
+  heightCm: MaybeDimension
+}): boolean {
+  return (
+    artwork.pickupOnly ||
+    artwork.requiresSpecialistCarrier ||
+    artwork.weightKg === null ||
+    artwork.weightKg === undefined ||
+    artwork.lengthCm === null ||
+    artwork.lengthCm === undefined ||
+    artwork.widthCm === null ||
+    artwork.widthCm === undefined ||
+    artwork.heightCm === null ||
+    artwork.heightCm === undefined
+  )
+}
