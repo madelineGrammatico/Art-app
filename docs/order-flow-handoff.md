@@ -47,17 +47,40 @@ les **invariants à préserver**, et un **emplacement à remplir** avec les inco
 
 ---
 
-## 3. Incohérences à traiter  ⚠️ À COMPLÉTER
+## 3. Incohérences traitées ✅ (session juillet 2026)
 
-> Lister ici chaque incohérence trouvée. Format suggéré par item :
-> - **Symptôme** (ce qu'on observe) :
-> - **Où** (page/route/fonction) :
-> - **Attendu** (comportement correct) :
-> - **Impact** (UX / argent / données) :
+Distinction œuvre/colis **2 jeux** et sélection transporteur **multi-offres US2.4** (décisions
+tranchées avec la dev).
 
-1. …
-2. …
-3. …
+**Création d'œuvre (admin)**
+1. *Dimensions obligatoires* — **déjà OK** avant cette session (form `required` + `artworkDimensionsSchema`).
+2. *Case retrait sur place (`pickupOnly`)* — **déjà OK** avant cette session.
+3. *Dimensions œuvre ≠ dimensions colis* — **corrigé** : ajout de `packageWeightKg/Length/Width/HeightCm`
+   sur `Artwork` (obligatoires, pilotent devis + seuils) ; les `weightKg…` deviennent descriptifs
+   (optionnels). Bascule de tous les consommateurs shipping sur `package*` (cartShipping, thresholds
+   `artworkBlocksDelivery`, create-checkout-session, webhook `createParcelsForInvoice`).
+
+**Flux acheteur (checkout)**
+4. *Warning « Decimal » console* — **corrigé** : `basket/page.tsx` projetait `...item.artwork` (les 8
+   Decimal traversaient la frontière RSC) → projection explicite de champs plains. Idem page d'édition
+   admin (sérialisation avant `<ArtworkForm>`).
+5. *Pas de sélection transporteur* / 6. *pas d'affichage du prix* / 7. *prix confirmation ≠ Stripe
+   (50 → 68,58)* — **même racine, corrigés** : le devis n'était calculé qu'à la création de session Stripe,
+   jamais montré. Nouvel endpoint `POST /api/shipping/quote` (rejoue `computeCartShipping`) ; `CheckoutPanel`
+   affiche les offres par œuvre (radios), le sous-total port et le total = œuvres + port **avant** paiement,
+   et transmet `shippingSelections`. La route de session re-devise côté serveur (prix serveur = autorité).
+   ⚠️ Résidu assumé (spec décision #4) : pas de price-lock Sendcloud → écart possible prix affiché/facturé
+   si Sendcloud varie entre les 2 appels (secondes d'écart → négligeable).
+
+**Récap après paiement**
+8. *Confirmation 1 → 2 (œuvre + port)* / 9. *le port porte le nom de l'œuvre* — **même racine, corrigés** :
+   `by-session/route.ts` mappait **chaque** line item en « œuvre achetée ». Désormais seules les lignes
+   ARTWORK comptent comme œuvres ; les lignes SHIPPING sont renvoyées à part (`shipping.lines` avec le
+   libellé transporteur) et `PurchasedItemsPanel` affiche une section « Livraison » + un total payé
+   (œuvres + port).
+
+> ⚠️ Migration : les œuvres créées avant cette session n'ont pas de `package*` → non livrables (retrait
+> forcé) tant que l'admin ne les renseigne pas. Attendu (aucun backfill possible, dimension colis inconnue).
 
 ---
 
