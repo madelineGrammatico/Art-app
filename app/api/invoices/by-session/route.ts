@@ -30,16 +30,33 @@ export async function GET(request: NextRequest) {
       include: { artwork: true },
     })
 
-    const paidItems = (invoice?.lineItems ?? []).map((line) => ({
-      id: line.id,
-      amount: Number(line.lineTTC),
-      status: "PAID" as const,
-      artwork: {
-        id: line.artwork.id,
-        title: line.artwork.title,
-        price: Number(line.artwork.price),
-      },
-    }))
+    const lines = invoice?.lineItems ?? []
+
+    // Une œuvre livrée génère 2 lignes (ARTWORK + SHIPPING, même artworkId). Ne compter
+    // que les lignes ARTWORK comme « œuvres achetées » : sinon le port apparaît comme une
+    // 2ᵉ œuvre portant le titre de l'œuvre (incohérences #8/#9).
+    const paidItems = lines
+      .filter((line) => line.type === "ARTWORK")
+      .map((line) => ({
+        id: line.id,
+        amount: Number(line.lineTTC),
+        status: "PAID" as const,
+        artwork: {
+          id: line.artwork.id,
+          title: line.artwork.title,
+          price: Number(line.artwork.price),
+        },
+      }))
+
+    // Frais de port à part, avec le libellé du transporteur (jamais le titre de l'œuvre).
+    const shippingItems = lines
+      .filter((line) => line.type === "SHIPPING")
+      .map((line) => ({
+        id: line.id,
+        label: line.label,
+        amount: Number(line.lineTTC),
+      }))
+    const shippingTotal = shippingItems.reduce((sum, l) => sum + l.amount, 0)
 
     const refundedItems = refunded.map((rec) => ({
       id: rec.id,
@@ -52,7 +69,11 @@ export async function GET(request: NextRequest) {
       },
     }))
 
-    return NextResponse.json({ invoices: [...paidItems, ...refundedItems] })
+    return NextResponse.json({
+      invoices: [...paidItems, ...refundedItems],
+      shipping: { lines: shippingItems, total: shippingTotal },
+      fulfillmentMode: invoice?.fulfillmentMode ?? null,
+    })
   } catch (error) {
     console.error("Error fetching invoices by session:", error)
     return NextResponse.json(

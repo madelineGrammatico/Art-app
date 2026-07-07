@@ -13,15 +13,27 @@ export type PurchasedInvoice = {
   }
 }
 
-interface Props {
-  invoices: PurchasedInvoice[]
+// Frais de port de la commande (lignes SHIPPING), présentés à part avec le libellé du
+// transporteur — jamais mélangés aux œuvres (incohérences #8/#9).
+export type ShippingSummary = {
+  lines: { id: string; label: string; amount: number }[]
+  total: number
 }
 
-export default function PurchasedItemsPanel({ invoices }: Props) {
+interface Props {
+  invoices: PurchasedInvoice[]
+  shipping?: ShippingSummary
+}
+
+export default function PurchasedItemsPanel({ invoices, shipping }: Props) {
   const paid = invoices.filter((i) => i.status === "PAID")
   const refunded = invoices.filter((i) => i.status === "REFUNDED")
   const paidTotal = paid.reduce((sum, i) => sum + i.amount, 0)
   const refundedTotal = refunded.reduce((sum, i) => sum + i.amount, 0)
+  const shippingTotal = shipping?.total ?? 0
+  // Total réellement payé = œuvres acquises + frais de port (le port ne s'applique
+  // qu'aux œuvres honorées ; une œuvre remboursée au checkout n'a pas de ligne port).
+  const grandTotal = paidTotal + shippingTotal
 
   const allPaid = refunded.length === 0
   const allRefunded = paid.length === 0
@@ -80,6 +92,29 @@ export default function PurchasedItemsPanel({ invoices }: Props) {
             </Card>
           ))}
         </div>
+      )}
+
+      {shipping && shipping.lines.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <h3 className="text-lg font-semibold">Livraison</h3>
+          {shipping.lines.map((line) => (
+            <Card key={line.id} className="p-4">
+              <div className="flex justify-between items-center">
+                <p className="text-sm text-muted-foreground">{line.label}</p>
+                <p className="font-semibold">{line.amount.toFixed(2)} €</p>
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {paid.length > 0 && (
+        <Card className="p-4 bg-slate-900 text-white">
+          <div className="flex justify-between items-center">
+            <span className="font-semibold">Total payé</span>
+            <span className="text-xl font-bold">{grandTotal.toFixed(2)} €</span>
+          </div>
+        </Card>
       )}
 
       {refunded.length > 0 && (
