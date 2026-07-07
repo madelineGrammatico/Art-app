@@ -70,27 +70,28 @@ export function computeRequiresSpecialistCarrier(
 /**
  * Règle unique « cette œuvre bloque la livraison » (retrait sur place obligatoire),
  * utilisée à la fois par l'UX checkout (US1bis.2) et la garde serveur (cartShipping) :
- * override manuel admin, hors-gabarit auto-détecté, ou dimensions incomplètes (une
- * œuvre sans dimensions ne pourra de toute façon jamais recevoir de devis, US0.2).
+ * override manuel admin, hors-gabarit auto-détecté, ou dimensions de COLIS incomplètes
+ * (sans elles, aucun devis transporteur possible, US0.2 — les dimensions descriptives
+ * de l'œuvre, elles, n'entrent jamais en compte).
  */
 export function artworkBlocksDelivery(artwork: {
   pickupOnly: boolean
   requiresSpecialistCarrier: boolean
-  weightKg: MaybeDimension
-  lengthCm: MaybeDimension
-  widthCm: MaybeDimension
-  heightCm: MaybeDimension
+  packageWeightKg: MaybeDimension
+  packageLengthCm: MaybeDimension
+  packageWidthCm: MaybeDimension
+  packageHeightCm: MaybeDimension
 }): boolean {
   return (
     artwork.pickupOnly ||
     artwork.requiresSpecialistCarrier ||
-    artwork.weightKg === null ||
-    artwork.weightKg === undefined ||
-    artwork.lengthCm === null ||
-    artwork.lengthCm === undefined ||
-    artwork.widthCm === null ||
-    artwork.widthCm === undefined ||
-    artwork.heightCm === null ||
-    artwork.heightCm === undefined
+    artwork.packageWeightKg === null ||
+    artwork.packageWeightKg === undefined ||
+    artwork.packageLengthCm === null ||
+    artwork.packageLengthCm === undefined ||
+    artwork.packageWidthCm === null ||
+    artwork.packageWidthCm === undefined ||
+    artwork.packageHeightCm === null ||
+    artwork.packageHeightCm === undefined
   )
 }

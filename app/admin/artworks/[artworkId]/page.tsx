@@ -21,6 +21,25 @@ export default async function page({params}: Pageprops) {
             </CardHeader>
         </Card>
     )
+    // Sérialiser les Decimal Prisma en string avant de traverser la frontière RSC
+    // (un composant client ne peut pas recevoir d'objets Decimal, cf. warning console).
+    const dim = (d: { toString(): string } | null) => (d != null ? d.toString() : null)
+    const artworkForForm = {
+        id: artwork.id,
+        title: artwork.title,
+        price: artwork.price.toString(),
+        weightKg: dim(artwork.weightKg),
+        lengthCm: dim(artwork.lengthCm),
+        widthCm: dim(artwork.widthCm),
+        heightCm: dim(artwork.heightCm),
+        packageWeightKg: dim(artwork.packageWeightKg),
+        packageLengthCm: dim(artwork.packageLengthCm),
+        packageWidthCm: dim(artwork.packageWidthCm),
+        packageHeightCm: dim(artwork.packageHeightCm),
+        pickupOnly: artwork.pickupOnly,
+        requiresSpecialistCarrier: artwork.requiresSpecialistCarrier,
+    }
+
     return (
         <div className='flex flex-col w-full p-4 gap-4'>
             <Link
@@ -29,7 +48,7 @@ export default async function page({params}: Pageprops) {
             >Home
             </Link>
 
-            <ArtworkForm artwork={artwork}/>
+            <ArtworkForm artwork={artworkForForm}/>
         </div>
     )
 }

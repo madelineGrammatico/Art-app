@@ -16,10 +16,16 @@ export async function createArtwork(
     title: string
     price: number
     ownerId: string | null
+    // Dimensions descriptives de l'œuvre (optionnelles).
     weightKg: number
     lengthCm: number
     widthCm: number
     heightCm: number
+    // Dimensions du colis (pilotent devis + seuils). null par défaut = non livrable.
+    packageWeightKg: number
+    packageLengthCm: number
+    packageWidthCm: number
+    packageHeightCm: number
     requiresSpecialistCarrier: boolean
     pickupOnly: boolean
   }> = {}
@@ -33,6 +39,10 @@ export async function createArtwork(
       lengthCm: overrides.lengthCm ?? null,
       widthCm: overrides.widthCm ?? null,
       heightCm: overrides.heightCm ?? null,
+      packageWeightKg: overrides.packageWeightKg ?? null,
+      packageLengthCm: overrides.packageLengthCm ?? null,
+      packageWidthCm: overrides.packageWidthCm ?? null,
+      packageHeightCm: overrides.packageHeightCm ?? null,
       requiresSpecialistCarrier: overrides.requiresSpecialistCarrier ?? false,
       pickupOnly: overrides.pickupOnly ?? false,
     },

@@ -15,13 +15,22 @@ model Artwork {
   title String
   price Decimal
 
-  // Données physiques requises pour le devis transporteur (B14 EPIC 0). Nullable :
-  // une œuvre existante sans ces valeurs = donnée manquante (≠ 0) → rejet au checkout
-  // (US0.2), jamais un calcul à 0 €. Pas de backfill possible (dimension inconnue).
+  // Dimensions DESCRIPTIVES de l'œuvre elle-même (B14). Optionnelles : purement
+  // informatives (affichage), elles ne pilotent NI le devis NI les seuils transporteur
+  // — c'est le colis expédié (caisse + calage) qui compte, cf. package* ci-dessous.
   weightKg Decimal?
   lengthCm Decimal?
   widthCm  Decimal?
   heightCm Decimal?
+
+  // Dimensions du COLIS réellement expédié (œuvre emballée : caisse, calage, protection)
+  // — source de vérité du devis transporteur ET des seuils (B14 EPIC 0). Nullable :
+  // une œuvre existante sans ces valeurs = donnée manquante (≠ 0) → rejet au checkout
+  // (US0.2), jamais un calcul à 0 €. Requises à la saisie admin (livraison possible).
+  packageWeightKg Decimal?
+  packageLengthCm Decimal?
+  packageWidthCm  Decimal?
+  packageHeightCm Decimal?
 
   // Recalculé à chaque create/update admin à partir des seuils courants (US0.1).
   // Sert UNIQUEMENT à l'affichage admin (US5.1) ; peut devenir stale si la config

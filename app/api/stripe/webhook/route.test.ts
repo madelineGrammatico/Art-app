@@ -937,10 +937,10 @@ describe("POST /api/stripe/webhook", () => {
     const artwork = await createArtwork({
       title: "Crépuscule",
       price: 250,
-      weightKg: 5,
-      lengthCm: 40,
-      widthCm: 30,
-      heightCm: 20,
+      packageWeightKg: 5,
+      packageLengthCm: 40,
+      packageWidthCm: 30,
+      packageHeightCm: 20,
     })
     await createBasketWithItem({ userId: buyer.id, artworkId: artwork.id })
     const sessionId = "cs_ship_delivery"
@@ -990,10 +990,10 @@ describe("POST /api/stripe/webhook", () => {
     const artwork = await createArtwork({
       title: "Aurore",
       price: 100,
-      weightKg: 5,
-      lengthCm: 40,
-      widthCm: 30,
-      heightCm: 20,
+      packageWeightKg: 5,
+      packageLengthCm: 40,
+      packageWidthCm: 30,
+      packageHeightCm: 20,
     })
     await createBasketWithItem({ userId: buyer.id, artworkId: artwork.id })
     const sessionId = "cs_ship_fail"
@@ -1036,10 +1036,10 @@ describe("POST /api/stripe/webhook", () => {
     const address = await createAddress({ userId: buyer.id })
     const artwork = await createArtwork({
       price: 100,
-      weightKg: 5,
-      lengthCm: 40,
-      widthCm: 30,
-      heightCm: 20,
+      packageWeightKg: 5,
+      packageLengthCm: 40,
+      packageWidthCm: 30,
+      packageHeightCm: 20,
     })
     await createBasketWithItem({ userId: buyer.id, artworkId: artwork.id })
     const sessionId = "cs_ship_idem"

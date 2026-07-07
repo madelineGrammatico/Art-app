@@ -3,15 +3,16 @@ import { getShippingConfig } from "./shippingConfig"
 import { exceedsStandardThresholds } from "./thresholds"
 import { getShippingRates, type AddressInput, type ShippingRate } from "./sendcloudClient"
 
-// Item de panier pour le devis — dimensions nullable (donnée physique potentiellement
-// absente, gérée explicitement, US0.2).
+// Item de panier pour le devis — dimensions du COLIS (celles qui pilotent le devis et
+// les seuils), nullable (donnée physique potentiellement absente, gérée explicitement,
+// US0.2). Les dimensions descriptives de l'œuvre n'entrent jamais dans le calcul.
 export type CartShippingItem = {
   artworkId: string
   pickupOnly: boolean
-  weightKg: Prisma.Decimal | null
-  lengthCm: Prisma.Decimal | null
-  widthCm: Prisma.Decimal | null
-  heightCm: Prisma.Decimal | null
+  packageWeightKg: Prisma.Decimal | null
+  packageLengthCm: Prisma.Decimal | null
+  packageWidthCm: Prisma.Decimal | null
+  packageHeightCm: Prisma.Decimal | null
 }
 
 export type CartShippingResult =
@@ -34,16 +35,16 @@ export async function computeCartShipping(args: {
 }): Promise<CartShippingResult> {
   const config = getShippingConfig()
 
-  // 1. Validation « donnée physique présente » sur tout le panier avant tout appel réseau.
+  // 1. Validation « donnée colis présente » sur tout le panier avant tout appel réseau.
   for (const item of args.items) {
     if (
-      item.weightKg === null ||
-      item.lengthCm === null ||
-      item.widthCm === null ||
-      item.heightCm === null
+      item.packageWeightKg === null ||
+      item.packageLengthCm === null ||
+      item.packageWidthCm === null ||
+      item.packageHeightCm === null
     ) {
       throw new Error(
-        `Poids/dimensions manquants pour l'œuvre ${item.artworkId} : devis transporteur impossible.`
+        `Dimensions du colis manquantes pour l'œuvre ${item.artworkId} : devis transporteur impossible.`
       )
     }
   }
@@ -56,10 +57,10 @@ export async function computeCartShipping(args: {
         item.pickupOnly ||
         exceedsStandardThresholds(
           {
-            weightKg: item.weightKg!,
-            lengthCm: item.lengthCm!,
-            widthCm: item.widthCm!,
-            heightCm: item.heightCm!,
+            weightKg: item.packageWeightKg!,
+            lengthCm: item.packageLengthCm!,
+            widthCm: item.packageWidthCm!,
+            heightCm: item.packageHeightCm!,
           },
           config
         )
@@ -74,10 +75,10 @@ export async function computeCartShipping(args: {
   const quotes = await Promise.all(
     args.items.map(async (item) => {
       const rates = await getShippingRates({
-        weightKg: item.weightKg!.toNumber(),
-        lengthCm: item.lengthCm!.toNumber(),
-        widthCm: item.widthCm!.toNumber(),
-        heightCm: item.heightCm!.toNumber(),
+        weightKg: item.packageWeightKg!.toNumber(),
+        lengthCm: item.packageLengthCm!.toNumber(),
+        widthCm: item.packageWidthCm!.toNumber(),
+        heightCm: item.packageHeightCm!.toNumber(),
         toAddress: args.toAddress,
       })
       return [item.artworkId, rates] as const

@@ -81,9 +81,16 @@ describe("computeRequiresSpecialistCarrier", () => {
 })
 
 describe("artworkBlocksDelivery", () => {
-  const complete = dims(5, 40, 30, 20) // dans les seuils
+  // Dimensions du COLIS (celles qui comptent) dans les seuils.
+  const pkg = (weightKg: number, l: number, w: number, h: number) => ({
+    packageWeightKg: new Prisma.Decimal(weightKg),
+    packageLengthCm: new Prisma.Decimal(l),
+    packageWidthCm: new Prisma.Decimal(w),
+    packageHeightCm: new Prisma.Decimal(h),
+  })
+  const complete = pkg(5, 40, 30, 20)
 
-  it("dimensions complètes, rien de coché → false (livraison possible)", () => {
+  it("dimensions colis complètes, rien de coché → false (livraison possible)", () => {
     expect(
       artworkBlocksDelivery({ pickupOnly: false, requiresSpecialistCarrier: false, ...complete })
     ).toBe(false)
@@ -101,15 +108,15 @@ describe("artworkBlocksDelivery", () => {
     ).toBe(true)
   })
 
-  it("une dimension manquante → true (jamais de devis possible, cf. US0.2)", () => {
+  it("une dimension colis manquante → true (jamais de devis possible, cf. US0.2)", () => {
     expect(
       artworkBlocksDelivery({
         pickupOnly: false,
         requiresSpecialistCarrier: false,
-        weightKg: null,
-        lengthCm: complete.lengthCm,
-        widthCm: complete.widthCm,
-        heightCm: complete.heightCm,
+        packageWeightKg: null,
+        packageLengthCm: complete.packageLengthCm,
+        packageWidthCm: complete.packageWidthCm,
+        packageHeightCm: complete.packageHeightCm,
       })
     ).toBe(true)
   })

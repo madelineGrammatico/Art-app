@@ -10,6 +10,12 @@ import { artworkDimensionsSchema } from "@/src/lib/shema"
 type ArtworkInput = {
     title: string
     price: number
+    // Dimensions du colis (obligatoires) — pilotent devis + seuils.
+    packageWeightKg?: number | null
+    packageLengthCm?: number | null
+    packageWidthCm?: number | null
+    packageHeightCm?: number | null
+    // Dimensions descriptives de l'œuvre (optionnelles).
     weightKg?: number | null
     lengthCm?: number | null
     widthCm?: number | null
@@ -18,20 +24,28 @@ type ArtworkInput = {
 }
 
 type ParsedShippingFields = {
-    weightKg: number
-    lengthCm: number
-    widthCm: number
-    heightCm: number
+    packageWeightKg: number
+    packageLengthCm: number
+    packageWidthCm: number
+    packageHeightCm: number
+    weightKg: number | null | undefined
+    lengthCm: number | null | undefined
+    widthCm: number | null | undefined
+    heightCm: number | null | undefined
     pickupOnly: boolean
     requiresSpecialistCarrier: boolean
 }
 
-// Poids/dimensions obligatoires (US0.1) : sans elles, aucun devis transporteur n'est
-// jamais possible (cf. artworkBlocksDelivery) → rejet explicite au lieu du silencieux
-// repli sur `null` d'avant B14 (une œuvre incomplète est un retrait forcé côté
-// checkout, pas un cas normal côté admin).
+// Dimensions du COLIS obligatoires (US0.1) : sans elles, aucun devis transporteur n'est
+// jamais possible (cf. artworkBlocksDelivery) → rejet explicite. Les dimensions
+// descriptives de l'œuvre restent optionnelles. `requiresSpecialistCarrier` se calcule
+// sur le colis (l'objet réellement expédié).
 function parseShippingFields(artwork: ArtworkInput): { error: string } | { data: ParsedShippingFields } {
     const parsed = artworkDimensionsSchema.safeParse({
+        packageWeightKg: artwork.packageWeightKg,
+        packageLengthCm: artwork.packageLengthCm,
+        packageWidthCm: artwork.packageWidthCm,
+        packageHeightCm: artwork.packageHeightCm,
         weightKg: artwork.weightKg,
         lengthCm: artwork.lengthCm,
         widthCm: artwork.widthCm,
@@ -41,12 +55,27 @@ function parseShippingFields(artwork: ArtworkInput): { error: string } | { data:
     if (!parsed.success) {
         return { error: parsed.error.issues[0].message }
     }
-    const { pickupOnly, ...dims } = parsed.data
+    const { pickupOnly, packageWeightKg, packageLengthCm, packageWidthCm, packageHeightCm } = parsed.data
     return {
         data: {
-            ...dims,
+            packageWeightKg,
+            packageLengthCm,
+            packageWidthCm,
+            packageHeightCm,
+            weightKg: parsed.data.weightKg,
+            lengthCm: parsed.data.lengthCm,
+            widthCm: parsed.data.widthCm,
+            heightCm: parsed.data.heightCm,
             pickupOnly,
-            requiresSpecialistCarrier: computeRequiresSpecialistCarrier(dims, getShippingConfig()),
+            requiresSpecialistCarrier: computeRequiresSpecialistCarrier(
+                {
+                    weightKg: packageWeightKg,
+                    lengthCm: packageLengthCm,
+                    widthCm: packageWidthCm,
+                    heightCm: packageHeightCm,
+                },
+                getShippingConfig()
+            ),
         },
     }
 }

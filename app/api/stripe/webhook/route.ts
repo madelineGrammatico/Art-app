@@ -266,14 +266,19 @@ async function createParcelsForInvoice(invoice: EmittedInvoice, sessionId: strin
     try {
       const artwork = await prisma.artwork.findUnique({
         where: { id: line.artworkId },
-        select: { weightKg: true, lengthCm: true, widthCm: true, heightCm: true },
+        select: {
+          packageWeightKg: true,
+          packageLengthCm: true,
+          packageWidthCm: true,
+          packageHeightCm: true,
+        },
       })
       if (
         !line.shippingMethodId ||
-        !artwork?.weightKg ||
-        !artwork.lengthCm ||
-        !artwork.widthCm ||
-        !artwork.heightCm ||
+        !artwork?.packageWeightKg ||
+        !artwork.packageLengthCm ||
+        !artwork.packageWidthCm ||
+        !artwork.packageHeightCm ||
         !invoice.shippingStreet ||
         !invoice.shippingPostalCode ||
         !invoice.shippingCity ||
@@ -290,10 +295,10 @@ async function createParcelsForInvoice(invoice: EmittedInvoice, sessionId: strin
           city: invoice.shippingCity,
           country: invoice.shippingCountry,
         },
-        weightKg: Number(artwork.weightKg),
-        lengthCm: Number(artwork.lengthCm),
-        widthCm: Number(artwork.widthCm),
-        heightCm: Number(artwork.heightCm),
+        weightKg: Number(artwork.packageWeightKg),
+        lengthCm: Number(artwork.packageLengthCm),
+        widthCm: Number(artwork.packageWidthCm),
+        heightCm: Number(artwork.packageHeightCm),
       })
       await prisma.invoiceLineItem.update({
         where: { id: line.id },

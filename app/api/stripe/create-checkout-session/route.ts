@@ -118,10 +118,10 @@ export async function POST(request: NextRequest) {
           items: basket.items.map((item) => ({
             artworkId: item.artworkId,
             pickupOnly: item.artwork.pickupOnly,
-            weightKg: item.artwork.weightKg,
-            lengthCm: item.artwork.lengthCm,
-            widthCm: item.artwork.widthCm,
-            heightCm: item.artwork.heightCm,
+            packageWeightKg: item.artwork.packageWeightKg,
+            packageLengthCm: item.artwork.packageLengthCm,
+            packageWidthCm: item.artwork.packageWidthCm,
+            packageHeightCm: item.artwork.packageHeightCm,
           })),
           toAddress: {
             street: shippingAddr.street,

@@ -37,10 +37,10 @@ const item = (
 ) => ({
   artworkId,
   pickupOnly: opts.pickupOnly ?? false,
-  weightKg: opts.weightKg === null ? null : new Prisma.Decimal(opts.weightKg ?? 5),
-  lengthCm: opts.l === null ? null : new Prisma.Decimal(opts.l ?? 40),
-  widthCm: opts.w === null ? null : new Prisma.Decimal(opts.w ?? 30),
-  heightCm: opts.h === null ? null : new Prisma.Decimal(opts.h ?? 20),
+  packageWeightKg: opts.weightKg === null ? null : new Prisma.Decimal(opts.weightKg ?? 5),
+  packageLengthCm: opts.l === null ? null : new Prisma.Decimal(opts.l ?? 40),
+  packageWidthCm: opts.w === null ? null : new Prisma.Decimal(opts.w ?? 30),
+  packageHeightCm: opts.h === null ? null : new Prisma.Decimal(opts.h ?? 20),
 })
 
 beforeEach(() => {
