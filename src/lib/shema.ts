@@ -23,22 +23,17 @@ const positiveDimension = z
     .finite("Doit être un nombre valide")
     .positive("Doit être strictement supérieur à 0")
 
-// Dimension descriptive de l'œuvre : optionnelle ("" → null côté form). Si fournie, doit
-// rester un nombre positif valide. Ne pilote NI le devis NI les seuils (cf. package*).
-const optionalPositiveDimension = positiveDimension.nullish()
-
-// Dimensions à la création ET à l'édition d'une œuvre (US0.1) :
-//  - colis (package*) OBLIGATOIRE — sans lui, aucun devis transporteur possible
-//    (cf. artworkBlocksDelivery) ; c'est le colis expédié qui compte, pas l'œuvre nue ;
-//  - œuvre (weightKg…) DESCRIPTIF, optionnel — purement informatif.
+// Dimensions à la création ET à l'édition d'une œuvre (US0.1) — toutes obligatoires :
+//  - colis (package*) : pilote devis + seuils (sans lui, aucun devis possible) ;
+//  - œuvre (weightKg…) : descriptif de l'œuvre nue, exigé aussi à la saisie.
 export const artworkDimensionsSchema = z.object({
     packageWeightKg: positiveDimension,
     packageLengthCm: positiveDimension,
     packageWidthCm: positiveDimension,
     packageHeightCm: positiveDimension,
-    weightKg: optionalPositiveDimension,
-    lengthCm: optionalPositiveDimension,
-    widthCm: optionalPositiveDimension,
-    heightCm: optionalPositiveDimension,
+    weightKg: positiveDimension,
+    lengthCm: positiveDimension,
+    widthCm: positiveDimension,
+    heightCm: positiveDimension,
     pickupOnly: z.boolean(),
 })

@@ -56,8 +56,9 @@ tranchées avec la dev).
 1. *Dimensions obligatoires* — **déjà OK** avant cette session (form `required` + `artworkDimensionsSchema`).
 2. *Case retrait sur place (`pickupOnly`)* — **déjà OK** avant cette session.
 3. *Dimensions œuvre ≠ dimensions colis* — **corrigé** : ajout de `packageWeightKg/Length/Width/HeightCm`
-   sur `Artwork` (obligatoires, pilotent devis + seuils) ; les `weightKg…` deviennent descriptifs
-   (optionnels). Bascule de tous les consommateurs shipping sur `package*` (cartShipping, thresholds
+   sur `Artwork` (pilotent devis + seuils) ; les `weightKg…` deviennent descriptifs de l'œuvre nue. Les
+   **deux jeux sont obligatoires à la saisie** (colonnes nullable pour les œuvres existantes). Bascule de
+   tous les consommateurs shipping sur `package*` (cartShipping, thresholds
    `artworkBlocksDelivery`, create-checkout-session, webhook `createParcelsForInvoice`).
 
 **Flux acheteur (checkout)**

@@ -14,9 +14,9 @@ Contrats figés pour écrire les tests, puis l'implémentation. Découle des use
 > **MàJ juillet 2026 (correction incohérences flux acheteur, cf. [order-flow-handoff.md](order-flow-handoff.md) §3) :**
 > - **Dimensions colis distinctes de l'œuvre** : le devis et les seuils se calculent désormais sur des champs
 >   dédiés `Artwork.packageWeightKg/packageLengthCm/packageWidthCm/packageHeightCm` (obligatoires, = colis
->   emballé). Les `weightKg/lengthCm/widthCm/heightCm` restent sur `Artwork` mais deviennent **descriptifs
->   (optionnels)** et n'entrent plus dans le calcul. Partout où §1–§3 ci-dessous disent « dimensions de
->   l'œuvre » pour le devis/les seuils, lire **`package*`**.
+>   emballé). Les `weightKg/lengthCm/widthCm/heightCm` restent sur `Artwork` mais deviennent **descriptifs**
+>   de l'œuvre nue (toujours **obligatoires à la saisie**) et n'entrent plus dans le calcul. Partout où
+>   §1–§3 ci-dessous disent « dimensions de l'œuvre » pour le devis/les seuils, lire **`package*`**.
 > - **UI multi-offres US2.4 construite** : endpoint `POST /api/shipping/quote` + sélection transporteur par
 >   œuvre affichée au checkout (prix montré avant paiement). Le défaut curé (`selectPreferredRate`) reste le
 >   repli serveur si aucune sélection n'est transmise.

@@ -28,18 +28,17 @@ type ParsedShippingFields = {
     packageLengthCm: number
     packageWidthCm: number
     packageHeightCm: number
-    weightKg: number | null | undefined
-    lengthCm: number | null | undefined
-    widthCm: number | null | undefined
-    heightCm: number | null | undefined
+    weightKg: number
+    lengthCm: number
+    widthCm: number
+    heightCm: number
     pickupOnly: boolean
     requiresSpecialistCarrier: boolean
 }
 
-// Dimensions du COLIS obligatoires (US0.1) : sans elles, aucun devis transporteur n'est
-// jamais possible (cf. artworkBlocksDelivery) → rejet explicite. Les dimensions
-// descriptives de l'œuvre restent optionnelles. `requiresSpecialistCarrier` se calcule
-// sur le colis (l'objet réellement expédié).
+// Dimensions obligatoires (US0.1) : colis (pilote devis + seuils, sans lui aucun devis
+// possible) ET œuvre (descriptif) → rejet explicite si l'une manque.
+// `requiresSpecialistCarrier` se calcule sur le colis (l'objet réellement expédié).
 function parseShippingFields(artwork: ArtworkInput): { error: string } | { data: ParsedShippingFields } {
     const parsed = artworkDimensionsSchema.safeParse({
         packageWeightKg: artwork.packageWeightKg,

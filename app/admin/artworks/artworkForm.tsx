@@ -163,11 +163,11 @@ export function ArtworkForm({artwork}: {artwork?: ArtworkFormData}) {
                     </Label>
 
                     <p className="text-sm font-semibold text-black mt-2">
-                        Dimensions de l&apos;œuvre (optionnel)
+                        Dimensions de l&apos;œuvre (obligatoire)
                     </p>
                     <p className="text-xs text-black/70 -mt-2">
-                        Purement descriptif (fiche de l&apos;œuvre) — n&apos;entre pas dans
-                        le calcul des frais de port.
+                        Descriptif de l&apos;œuvre nue (fiche) — n&apos;entre pas dans le
+                        calcul des frais de port.
                     </p>
                     <Label>
                         Poids de l&apos;œuvre (kg)
@@ -175,6 +175,7 @@ export function ArtworkForm({artwork}: {artwork?: ArtworkFormData}) {
                             type="number"
                             step="0.01"
                             min="0.01"
+                            required
                             defaultValue={dimDefault(artwork?.weightKg)}
                             name="weightKg"
                             className="bg-white text-black"
@@ -186,6 +187,7 @@ export function ArtworkForm({artwork}: {artwork?: ArtworkFormData}) {
                             type="number"
                             step="0.1"
                             min="0.1"
+                            required
                             defaultValue={dimDefault(artwork?.lengthCm)}
                             name="lengthCm"
                             className="bg-white text-black"
@@ -197,6 +199,7 @@ export function ArtworkForm({artwork}: {artwork?: ArtworkFormData}) {
                             type="number"
                             step="0.1"
                             min="0.1"
+                            required
                             defaultValue={dimDefault(artwork?.widthCm)}
                             name="widthCm"
                             className="bg-white text-black"
@@ -208,6 +211,7 @@ export function ArtworkForm({artwork}: {artwork?: ArtworkFormData}) {
                             type="number"
                             step="0.1"
                             min="0.1"
+                            required
                             defaultValue={dimDefault(artwork?.heightCm)}
                             name="heightCm"
                             className="bg-white text-black"
