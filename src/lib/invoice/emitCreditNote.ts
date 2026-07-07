@@ -79,6 +79,9 @@ export async function emitCreditNote(
 
       buyerId: original.buyerId,
       buyerName: original.buyerName,
+      // Mode de remise copié de la facture d'origine (l'avoir reflète le document crédité ;
+      // sinon le défaut Prisma DELIVERY contredirait une vente PICKUP).
+      fulfillmentMode: original.fulfillmentMode,
 
       // Snapshot vendeur copié de la facture d'origine (immuabilité légale).
       sellerName: original.sellerName,

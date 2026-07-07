@@ -40,7 +40,7 @@ Ces fichiers vivent dans [.claude/rules/](.claude/rules/) et se chargent **condi
 
 La mémoire auto de Claude (`~/.claude/projects/…/memory/`) est **machine-local et ne voyage pas**. Sur une nouvelle machine, le contexte vient donc **de ce repo** (CLAUDE.md + `@MEMORY.md` + `.claude/rules/`). À recréer manuellement (non versionné) :
 
-- `.env*` (git-ignorés) : `DATABASE_URL`, secrets NextAuth, `GOOGLE_CLIENT_*`, `STRIPE_*` (dont `STRIPE_WEBHOOK_SECRET`), clé Resend. `.env.test` → DB docker port **5433** (`test`/`test`/`art_app_test`).
+- `.env*` (git-ignorés) : `DATABASE_URL`, secrets NextAuth, `AUTH_GOOGLE_ID` / `AUTH_GOOGLE_SECRET` (convention Auth.js v5, auto-détectées), `STRIPE_*` (dont `STRIPE_WEBHOOK_SECRET`), clé Resend. `.env.test` → DB docker port **5433** (`test`/`test`/`art_app_test`).
 - Permissions locales (`.claude/settings.local.json`).
 
 Puis `npm install` → `npm run db:migrate` (ou `npx prisma generate`).

@@ -316,11 +316,17 @@ async function createParcelsForInvoice(invoice: EmittedInvoice, sessionId: strin
         error: err instanceof Error ? err.message : err,
       })
       try {
+        // Titre de l'œuvre = label de la ligne ARTWORK (celui de la ligne SHIPPING est le
+        // nom du transporteur). Fallback défensif improbable (1 œuvre = 1 ligne ARTWORK).
+        const artworkTitle =
+          invoice.lineItems.find(
+            (l) => l.type === "ARTWORK" && l.artworkId === line.artworkId
+          )?.label ?? line.label
         await sendShippingIncidentAdminMail({
           invoiceId: invoice.id,
           invoiceNumber: invoice.number,
           artworkId: line.artworkId,
-          artworkTitle: line.label,
+          artworkTitle,
           shippingMethodId: line.shippingMethodId,
           error: err instanceof Error ? err.message : String(err),
         })
@@ -505,6 +511,11 @@ export async function POST(request: NextRequest) {
         label: s.label,
         unitPriceHT: s.unitPriceHTCents / 100,
       }))
+      // Port gelé par œuvre (euros) : Stripe a encaissé œuvre + port comme deux lignes.
+      // En cas de race, il faut rembourser AUSSI le port de l'œuvre non transférée.
+      const shippingHTByArtwork = new Map(
+        shippingSelections.map((s) => [s.artworkId, s.unitPriceHT])
+      )
 
       let emittedInvoice: Awaited<ReturnType<typeof emitSaleInvoice>> | null = null
       try {
@@ -530,18 +541,22 @@ export async function POST(request: NextRequest) {
               })
             } else {
               // Déjà vendue (race) : pas de vente → marqueur de récupération + remboursement.
+              // Rembourser œuvre + port encaissés (le port de cette œuvre n'aura jamais de
+              // colis ni de ligne de facture → sinon le client le paie pour rien).
+              const shippingHT = shippingHTByArtwork.get(artworkId) ?? 0
+              const refundAmount = new Prisma.Decimal(artwork.price).plus(shippingHT)
               await tx.refundRecovery.create({
                 data: {
                   stripeSessionId: session.id,
                   buyerId: userId,
                   artworkId,
-                  amount: artwork.price,
+                  amount: refundAmount,
                 },
               })
               failures.push({
                 artworkId,
                 artworkTitle: artwork.title,
-                amountCents: Math.round(Number(artwork.price) * 100),
+                amountCents: Math.round(Number(refundAmount) * 100),
               })
             }
           }

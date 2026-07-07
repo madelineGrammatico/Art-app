@@ -44,8 +44,9 @@ export default function PurchasedItemsPanel({ invoices, shipping }: Props) {
         <Card className="p-6 bg-green-50 border-green-200">
           <p className="text-green-800 font-semibold mb-2">Merci pour votre achat !</p>
           <p className="text-sm text-green-700">
-            Vous avez acheté {paid.length} oeuvre{paid.length > 1 ? "s" : ""} pour un total de{" "}
-            {paidTotal.toFixed(2)} €.
+            Vous avez acheté {paid.length} oeuvre{paid.length > 1 ? "s" : ""} pour{" "}
+            {paidTotal.toFixed(2)} €
+            {shippingTotal > 0 ? ` + ${shippingTotal.toFixed(2)} € de livraison` : ""}.
           </p>
         </Card>
       )}

@@ -140,6 +140,16 @@ describe("computeCartShipping", () => {
     expect(mockedRates).not.toHaveBeenCalled()
   })
 
+  it("aucune offre transporteur pour une œuvre : non éligible (bascule retrait), pas de blocage muet (bug_010)", async () => {
+    mockedRates.mockResolvedValue([]) // toutes les options filtrées (point-relais, sans prix…)
+
+    const res = await computeCartShipping({ items: [item("a1")], toAddress: TO_ADDRESS })
+
+    expect(res.eligible).toBe(false)
+    if (res.eligible) throw new Error("attendu : non eligible")
+    expect(res.blockingArtworkIds).toContain("a1")
+  })
+
   it("échec/timeout du devis transporteur : propage l'erreur, pas de fallback 0 € (US2.1)", async () => {
     mockedRates.mockRejectedValue(new Error("Sendcloud timeout"))
 

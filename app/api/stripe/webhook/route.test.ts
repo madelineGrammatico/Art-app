@@ -338,6 +338,48 @@ describe("POST /api/stripe/webhook", () => {
     )
   })
 
+  it("DELIVERY race: refund + RefundRecovery include the shipping the buyer paid (bug_001)", async () => {
+    const otherBuyer = await createUser()
+    const lateBuyer = await createUser({ email: "shiprace@test.local" })
+    const artwork = await createArtwork({
+      title: "Crépuscule",
+      price: 100,
+      ownerId: otherBuyer.id,
+      packageWeightKg: 5,
+      packageLengthCm: 40,
+      packageWidthCm: 30,
+      packageHeightCm: 20,
+    })
+    const sessionId = "cs_test_race_shipping"
+
+    mockedVerify.mockResolvedValue(
+      makeCheckoutCompletedEvent({
+        sessionId,
+        userId: lateBuyer.id,
+        artworkIds: [artwork.id],
+        paymentIntentId: "pi_test_race_ship",
+        fulfillmentMode: "DELIVERY",
+        shippingSelections: [
+          { artworkId: artwork.id, shippingMethodId: "sc_1", label: "Colissimo", unitPriceHTCents: 1500 },
+        ],
+      })
+    )
+    mockedRefund.mockResolvedValue({ id: "re_ship_race" } as never)
+
+    const res = await POST(makeRequest())
+    expect(res.status).toBe(200)
+
+    // Aucune vente : le port n'aura ni colis ni ligne de facture → il doit être remboursé.
+    const recoveries = await prisma.refundRecovery.findMany({ where: { stripeSessionId: sessionId } })
+    expect(recoveries).toHaveLength(1)
+    expect(Number(recoveries[0].amount)).toBe(115) // 100 œuvre + 15 port
+
+    expect(mockedRefund).toHaveBeenCalledWith(
+      { payment_intent: "pi_test_race_ship", amount: 11500 },
+      { idempotencyKey: `refund-${sessionId}` }
+    )
+  })
+
   it("partial race: 1 available + 1 taken → invoice with 1 line item + 1 RefundRecovery + partial refund", async () => {
     const buyer = await createUser()
     const otherOwner = await createUser()

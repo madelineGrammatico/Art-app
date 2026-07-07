@@ -77,6 +77,10 @@ export default function CheckoutPanel({
   const [selections, setSelections] = useState<Record<string, string>>({})
   const [quoteStatus, setQuoteStatus] = useState<QuoteStatus>("idle")
   const [quoteError, setQuoteError] = useState<string | null>(null)
+  // Motif « livraison impossible » persistant : indépendant de quoteStatus, sinon le
+  // re-run du useEffect (déclenché par le passage auto en PICKUP) le réinitialiserait et
+  // le message disparaîtrait en une frame. Remis à false seulement au prochain devis DELIVERY.
+  const [deliveryBlocked, setDeliveryBlocked] = useState(false)
 
   useEffect(() => {
     if (fulfillmentMode !== "DELIVERY" || !effectiveShippingId) {
@@ -88,6 +92,7 @@ export default function CheckoutPanel({
     let cancelled = false
     setQuoteStatus("loading")
     setQuoteError(null)
+    setDeliveryBlocked(false)
 
     ;(async () => {
       try {
@@ -109,6 +114,7 @@ export default function CheckoutPanel({
           // on bascule en retrait, seule option possible pour cette commande.
           setQuoteStatus("ineligible")
           setQuotes([])
+          setDeliveryBlocked(true)
           setFulfillmentMode("PICKUP")
           return
         }
@@ -248,7 +254,7 @@ export default function CheckoutPanel({
             convenir d'un rendez-vous.
           </p>
         )}
-        {quoteStatus === "ineligible" && (
+        {deliveryBlocked && (
           <p className="text-sm text-amber-900 mt-3">
             Après vérification, une œuvre de votre panier est hors gabarit transporteur
             standard : seul le retrait sur place est possible pour cette commande.

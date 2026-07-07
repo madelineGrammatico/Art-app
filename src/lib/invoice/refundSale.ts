@@ -159,11 +159,17 @@ export async function refundSale(args: {
         error: err instanceof Error ? err.message : err,
       })
       try {
+        // Titre de l'œuvre = label de la ligne ARTWORK (celui de la ligne SHIPPING est le
+        // nom du transporteur). Fallback défensif improbable (1 œuvre = 1 ligne ARTWORK).
+        const artworkTitle =
+          targetLines.find(
+            (l) => l.type === "ARTWORK" && l.artworkId === line.artworkId
+          )?.label ?? line.label
         await sendShippingIncidentAdminMail({
           invoiceId: invoice.id,
           invoiceNumber: invoice.number,
           artworkId: line.artworkId,
-          artworkTitle: line.label,
+          artworkTitle,
           shippingMethodId: line.shippingMethodId,
           error: err instanceof Error ? err.message : String(err),
         })

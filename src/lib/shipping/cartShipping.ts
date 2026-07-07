@@ -85,5 +85,13 @@ export async function computeCartShipping(args: {
     })
   )
 
+  // Une œuvre sans aucune offre home-delivery (toutes filtrées : point-relais, sans prix ;
+  // ou destination hors grille) → livraison impossible pour la commande, on bascule en
+  // retrait comme pour un hors-gabarit (jamais un panier bloqué sans explication, US1bis.2).
+  const unquoted = quotes.filter(([, rates]) => rates.length === 0).map(([id]) => id)
+  if (unquoted.length > 0) {
+    return { eligible: false, blockingArtworkIds: unquoted }
+  }
+
   return { eligible: true, quotesByArtwork: new Map(quotes) }
 }
