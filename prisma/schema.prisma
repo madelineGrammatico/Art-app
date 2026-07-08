@@ -49,9 +49,28 @@ model Artwork {
   certificateId    String?           @unique
   certificate      Certificate?
   basketItems      BasketItem[]
+  images           ArtworkImage[]
   createdAt        DateTime          @default(now())
 
   @@index([ownerId])
+}
+
+// Images d'une œuvre (B15). Le binaire vit dans Vercel Blob (public) ; la DB ne stocke
+// qu'une référence. `pathname` = clé Blob, indispensable pour del() à la suppression
+// (le Cascade nettoie la ligne, PAS le fichier Blob → sinon orphelins facturés).
+// Invariants tenus côté server action (pas en contrainte DB, cf. ROADMAP B15) :
+// une seule isPrimary par œuvre dès ≥ 1 image ; position contiguës à partir de 0.
+model ArtworkImage {
+  id        String   @id @default(uuid())
+  artworkId String
+  artwork   Artwork  @relation(fields: [artworkId], references: [id], onDelete: Cascade)
+  url       String
+  pathname  String
+  position  Int
+  isPrimary Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([artworkId])
 }
 
 model Certificate {

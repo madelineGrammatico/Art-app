@@ -8,6 +8,7 @@ import { createArtworkAction, editArtworkAction } from '../../api/artworks/artwo
 import React from 'react'
 import { Header } from '@/src/components/Header'
 import { Card } from '@/src/components/ui/card'
+import { ArtworkImagesField, type FormImage } from './ArtworkImagesField'
 
 // Vue sérialisée d'une œuvre pour le formulaire (client) : les Decimal Prisma sont
 // convertis en string/number côté serveur avant de traverser la frontière RSC → pas de
@@ -26,9 +27,25 @@ export type ArtworkFormData = {
   packageHeightCm: number | string | null
   pickupOnly: boolean
   requiresSpecialistCarrier: boolean
+  images?: { url: string; pathname: string; isPrimary: boolean }[]
 }
 
 export function ArtworkForm({artwork}: {artwork?: ArtworkFormData}) {
+
+    // État des images géré hors FormData (upload asynchrone vers Blob + réordonnancement D&D).
+    // `key` = id client stable pour React/dnd-kit ; l'ordre du tableau porte la position.
+    const [images, setImages] = React.useState<FormImage[]>(() =>
+        (artwork?.images ?? []).map((img) => ({ key: crypto.randomUUID(), ...img, persisted: true }))
+    )
+
+    // Projette l'état UI vers le contrat de la server action (position = index courant).
+    const imagesPayload = () =>
+        images.map((img, i) => ({
+            url: img.url,
+            pathname: img.pathname,
+            position: i,
+            isPrimary: img.isPrimary,
+        }))
 
     // "" → null (donnée manquante), sinon nombre. cleanDim côté action revalide (> 0, fini).
     const dimOrNull = (raw: FormDataEntryValue | null): number | null => {
@@ -57,6 +74,7 @@ export function ArtworkForm({artwork}: {artwork?: ArtworkFormData}) {
                 price: Number(FormData.get('price')),
                 ...dims,
                 pickupOnly,
+                images: imagesPayload(),
             })
             error= json.error
         } else {
@@ -65,6 +83,7 @@ export function ArtworkForm({artwork}: {artwork?: ArtworkFormData}) {
                 price: Number(FormData.get('price')),
                 ...dims,
                 pickupOnly,
+                images: imagesPayload(),
             })
             error= json.error
         }
@@ -237,6 +256,9 @@ export function ArtworkForm({artwork}: {artwork?: ArtworkFormData}) {
                             ⚠️ Hors gabarit transporteur standard — retrait sur place ou transporteur spécialisé.
                         </p>
                     )}
+
+                    <ArtworkImagesField value={images} onChange={setImages} />
+
                     <SubmitButton/>
                 </Form>
             </div>
