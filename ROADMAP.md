@@ -49,19 +49,90 @@ Prévu **après** la couverture de tests (déjà en place). Mérite sa propre br
 
 À démarrer **après** le merge de B13_INVOICE.
 
-**Inputs du calcul :**
-- Adresse de livraison (déjà dispo depuis B11).
-- **Dimensions + poids** → champs **à ajouter** sur `Artwork` (absents aujourd'hui).
-- Optionnel : transporteur choisi par l'utilisateur.
+> Recherche transporteurs (classiques + spécialisés œuvres d'art, agrégateurs, pricing, limites
+> poids/dimensions) : [docs/B14-shipping-research.md](docs/B14-shipping-research.md).
+> User stories (toutes décisions tranchées) : [docs/B14-shipping-user-stories.md](docs/B14-shipping-user-stories.md).
+> Spec technique (contrats Prisma, cycle de vie, signatures) : [docs/B14-shipping-spec.md](docs/B14-shipping-spec.md).
 
-**Intégrations :**
-- SDK transporteurs standards (DHL, La Poste, Mondial Relay… — à finaliser).
-- **Recherche à faire** : transporteurs **spécialisés œuvres d'art** (pièces volumineuses/lourdes/fragiles — ex. Convelio, MTAB, Crown Fine Art). Marché à part, à scoper avant de figer le schéma `Artwork` (éviter une double migration).
+**Statut : code applicatif complet + Sendcloud câblé et vérifié en réel (juin 2026).** Devis (v3
+`shipping-options`), création de colis (v3 `shipments/announce`) et annulation (v2 `parcels/{id}/cancel`)
+testés contre un vrai compte. Reste = poser les valeurs d'env en prod + l'écran multi-offres (US2.4) + CGV.
+Détail ci-dessous.
 
-**Contrainte produit clé :** sur le dashboard admin (création/édition d'œuvre), prévoir une **option pour restreindre la livraison aux transporteurs spécialisés** quand la pièce est trop volumineuse/lourde/fragile. → flag `requiresSpecialistCarrier: Boolean` (ou équivalent) sur `Artwork`, qui filtre les transporteurs proposés au checkout.
+**✅ Fait (implémenté + testé) :**
+- **Couche pure** (`src/lib/shipping/`) : `shippingConfig` (seuils env, `getShippingConfig` mémoïsé),
+  `thresholds` (`exceedsStandardThresholds` + `computeRequiresSpecialistCarrier`), `cartShipping`
+  (`computeCartShipping` : éligibilité, devis par œuvre, jamais 0 €).
+- **Migration** `b14_shipping` : dims/poids + `requiresSpecialistCarrier` sur `Artwork` ; enums
+  `FulfillmentMode`/`InvoiceLineItemType` ; `fulfillmentMode`/`pickupEmailSentAt` sur `Invoice` ;
+  `type`+`shipping*` sur `InvoiceLineItem` ; `@@unique([invoiceId, artworkId, type])`.
+- **Couche DB** : `emitSaleInvoice` (lignes SHIPPING + TVA) ; webhook (`createParcelsForInvoice` post-commit
+  idempotent + `sendPickupCoordinationEmail`) ; `refundSale`/`emitCreditNote` (crédite ARTWORK+SHIPPING,
+  corrige le bug de `Map` par artworkId, `cancelParcel` best-effort) ; `create-checkout-session`
+  (`computeCartShipping`, devis gelé en metadata + lignes Stripe, rejets 400).
+- **Flag spécialiste (US0.1/US5.1)** : recalcul à la création/édition d'œuvre + champs dims & bandeau sur le form admin.
+- **Mails** : `shippingIncidentAdminMail`, `pickupCoordinationUserMail`.
+- **UI checkout (EPIC E, US1bis)** : choix Livraison/Retrait, adresse de livraison conditionnelle,
+  verrouillage retrait si œuvre hors gabarit.
+- **Client Sendcloud câblé** (`sendcloudClient`) + `sendcloudConfig` (clés + adresse expéditeur) :
+  `getShippingRates` (v3, filtrage home-delivery), `createParcel` (v3, `SHIPPING_TEST_MODE` →
+  `sendcloud:letter` gratuit), `cancelParcel` (v2). `selectPreferredRate` = défaut curé (signature →
+  home → moins cher). Décisions #4/#6 tranchées (cf. spec).
+- **Config shipping validée paresseusement, PAS au boot** (`instrumentation.ts` ne valide que `SELLER_*`) :
+  `getShippingConfig`/`getSendcloudConfig` sont appelés au point d'entrée de la feature (checkout, webhook,
+  édition d'œuvre). Une config shipping incomplète ne dégrade que la livraison/les colis, jamais tout le
+  site. (`SELLER_*` reste au boot : consommé dans la transaction de paiement → un échec « lazy » créerait un
+  « payé mais rien livré », donc crash fort au boot = mode d'échec plus sûr.)
 
-**Intégration Stripe :**
-- Shipping comme **`line_item` additionnel** sur la session Checkout (cohérent avec les line items de B13_INVOICE).
+**⏳ Reste à faire :**
+- **Valeurs d'env à poser (dev + prod)** : `SENDCLOUD_PUBLIC_KEY`/`SENDCLOUD_SECRET_KEY`,
+  `SENDCLOUD_FROM_*` (adresse expéditeur), `SHIPPING_MAX_*`. Optionnels : `SHIPPING_TEST_MODE=true`
+  (étiquettes gratuites pour valider sans facturer), `SHIPPING_PREFERRED_OPTION_CODES`. Validées
+  paresseusement à l'usage (pas au boot) → une absence n'empêche pas l'app de démarrer, seule la feature
+  shipping échoue.
+- **CGV information rétractation** (juriste) — bloquant prod (spec §7).
+- **UI sélection transporteur multi-offres (US2.4)** : non faite — défaut curé en place
+  (`selectPreferredRate`), l'acheteur ne choisit pas. Endpoint de devis-preview + écran de sélection à
+  ajouter si on veut laisser le choix au client.
+- **Décision 🔶 #7 (flux retour rétractation)** : manuel hors app en MVP (cf. spec §3.E).
+
+**Correction actée en spec (à ne pas réintroduire) :** `InvoiceLineItem.artworkId` reste **NOT NULL** même
+pour les lignes `SHIPPING` (1 colis = 1 œuvre, jamais de ligne shipping agrégée multi-œuvres) — la
+contrainte `@@unique([invoiceId, artworkId])` devient `@@unique([invoiceId, artworkId, type])`. Trouvé en
+écrivant la spec : un `artworkId` nullable cassait le remboursement partiel par œuvre (US4.2).
+
+**Nouveau (spec, EPIC 3bis)** : réservation de l'étiquette réelle chez Sendcloud **après** confirmation du
+paiement (pas au devis) — le devis (gratuit, sans quota) sert au prix checkout ; seule la création du colis
+consomme le quota/coût. Idempotence via `InvoiceLineItem.shippingParcelId`/`shippingParcelFailedAt`.
+
+**Point encore ouvert à l'implémentation** (cf. spec, table « Décisions ouvertes ») : verrouillage de
+prix Sendcloud entre devis et réservation (pas de mécanisme identifié, écart résiduel assumé).
+
+**Décidé** : l'alerte admin sur échec de création de colis post-paiement (EPIC 3bis) passe par un mail
+**dédié** `sendShippingIncidentAdminMail`, pas par réutilisation du mail B13 — qui a d'ailleurs été
+**renommé** `sendIncidentAdminMail` → `sendCheckoutRaceIncidentAdminMail`
+([src/lib/mail/checkoutRaceIncidentAdminMail.ts](src/lib/mail/checkoutRaceIncidentAdminMail.ts)) : son
+nom générique masquait qu'il ne couvre qu'un seul cas précis (race au checkout, remboursement
+issued/failed) — pas réutilisable tel quel pour un futur incident sans rapport (pas de remboursement, pas
+de montant).
+
+**Décisions clés (détail dans le doc user stories) :**
+- **Scope MVP = agrégateur classique Sendcloud uniquement.** Pas de Convelio/spécialiste dans cette
+  branche — différé à une itération ultérieure (flag `requiresSpecialistCarrier` réservé mais pas encore
+  branché sur un appel API).
+- **Retrait sur place** (pratique courante en vente d'art) : toujours proposé comme option à côté de la
+  livraison, coordination par email après paiement (pas de créneaux gérés dans l'app). Devient
+  **l'unique option** pour une œuvre hors des seuils transporteur standard (poids/dimensions) — ça lève le
+  besoin de bloquer la vente de ces œuvres.
+- **1 œuvre = 1 colis, toujours** (pas de mutualisation multi-œuvres — packing/marges de protection trop
+  complexes à valider automatiquement).
+- **1 seul mode de remise par commande** (livraison ou retrait, jamais mixte par œuvre) — simplicité avant
+  flexibilité ; à revisiter si la demande se confirme.
+- **TVA sur le shipping = même taux que le reste de la facture** (BOFIP art. 267 du CGI, pas un taux à
+  part).
+- **`InvoiceLineItem`** : nouvel enum `InvoiceLineItemType` (`ARTWORK`/`SHIPPING`), `artworkId` reste
+  **NOT NULL** même pour les lignes `SHIPPING` (1 œuvre = 1 colis ; cf. [spec §0](docs/B14-shipping-spec.md)),
+  contrainte `@@unique([invoiceId, artworkId, type])` — évolution non destructive du modèle B13.
 - Alternative `shipping_options` natif Stripe : à évaluer, possiblement trop rigide pour le filtrage spécialistes.
 
 ---

@@ -5,9 +5,16 @@ import { verifyWebhookSignature } from "@/src/lib/stripe/webhook-handler"
 import Stripe from "stripe"
 import { Prisma } from "@prisma/client"
 import { sendRefundUserMail } from "@/src/lib/mail/refundUserMail"
-import { sendIncidentAdminMail } from "@/src/lib/mail/incidentAdminMail"
+import { sendCheckoutRaceIncidentAdminMail } from "@/src/lib/mail/checkoutRaceIncidentAdminMail"
 import { sendInvoiceUserMail } from "@/src/lib/mail/invoiceUserMail"
-import { emitSaleInvoice, type SoldItem } from "@/src/lib/invoice/emitSaleInvoice"
+import { sendShippingIncidentAdminMail } from "@/src/lib/mail/shippingIncidentAdminMail"
+import { sendPickupCoordinationUserMail } from "@/src/lib/mail/pickupCoordinationUserMail"
+import {
+  emitSaleInvoice,
+  type SoldItem,
+  type ShippingSelection,
+} from "@/src/lib/invoice/emitSaleInvoice"
+import { createParcel } from "@/src/lib/shipping/sendcloudClient"
 import { invoiceViewModel } from "@/src/lib/invoice/invoiceViewModel"
 import { renderInvoicePdf } from "@/src/lib/invoice/invoicePdf"
 
@@ -47,6 +54,33 @@ function parseAddressBlob(raw: string | undefined): AddressFromMetadata | null {
     return null
   } catch {
     return null
+  }
+}
+
+// Devis transporteur gelé au checkout, transporté dans les metadata Stripe (spec §3.B).
+// Prix en centimes (unité Sendcloud) ; converti en euros au moment de bâtir la ligne.
+type ShippingSelectionFromMetadata = {
+  artworkId: string
+  shippingMethodId: string
+  label: string
+  unitPriceHTCents: number
+}
+
+function parseShippingSelections(raw: string | undefined): ShippingSelectionFromMetadata[] {
+  if (!raw) return []
+  try {
+    const parsed = JSON.parse(raw)
+    if (!Array.isArray(parsed)) return []
+    return parsed.filter(
+      (s): s is ShippingSelectionFromMetadata =>
+        s &&
+        typeof s.artworkId === "string" &&
+        typeof s.shippingMethodId === "string" &&
+        typeof s.label === "string" &&
+        typeof s.unitPriceHTCents === "number"
+    )
+  } catch {
+    return []
   }
 }
 
@@ -156,7 +190,7 @@ async function handleRefunds(args: {
 
   if (!isRecovery) {
     try {
-      const adminMailRes = await sendIncidentAdminMail({
+      const adminMailRes = await sendCheckoutRaceIncidentAdminMail({
         sessionId,
         userId,
         userEmail,
@@ -210,6 +244,132 @@ async function sendInvoiceEmail(
     }
   } catch (err) {
     console.error("[webhook] invoice email threw", {
+      sessionId,
+      error: err instanceof Error ? err.message : err,
+    })
+  }
+}
+
+type EmittedInvoice = Awaited<ReturnType<typeof emitSaleInvoice>>
+
+// Réservation des étiquettes réelles APRÈS le commit (EPIC 3bis) — pattern sendInvoiceEmail.
+// Idempotent : on ne traite que les lignes SHIPPING sans shippingParcelId (pas encore créé)
+// ni shippingParcelFailedAt (déjà tenté et échoué → trace pour traitement manuel, pas de
+// re-spam de l'API). Best-effort : un échec marque la ligne + alerte admin, sans crash du
+// webhook (qui doit répondre 200 à Stripe).
+async function createParcelsForInvoice(invoice: EmittedInvoice, sessionId: string) {
+  if (invoice.fulfillmentMode !== "DELIVERY") return
+  const shippingLines = invoice.lineItems.filter(
+    (li) => li.type === "SHIPPING" && !li.shippingParcelId && !li.shippingParcelFailedAt
+  )
+  for (const line of shippingLines) {
+    try {
+      const artwork = await prisma.artwork.findUnique({
+        where: { id: line.artworkId },
+        select: {
+          packageWeightKg: true,
+          packageLengthCm: true,
+          packageWidthCm: true,
+          packageHeightCm: true,
+        },
+      })
+      if (
+        !line.shippingMethodId ||
+        !artwork?.packageWeightKg ||
+        !artwork.packageLengthCm ||
+        !artwork.packageWidthCm ||
+        !artwork.packageHeightCm ||
+        !invoice.shippingStreet ||
+        !invoice.shippingPostalCode ||
+        !invoice.shippingCity ||
+        !invoice.shippingCountry
+      ) {
+        throw new Error("Données de colis incomplètes (dimensions ou adresse de livraison manquantes)")
+      }
+      const { parcelId } = await createParcel({
+        shippingMethodId: line.shippingMethodId,
+        toName: invoice.buyerName,
+        toAddress: {
+          street: invoice.shippingStreet,
+          postalCode: invoice.shippingPostalCode,
+          city: invoice.shippingCity,
+          country: invoice.shippingCountry,
+        },
+        weightKg: Number(artwork.packageWeightKg),
+        lengthCm: Number(artwork.packageLengthCm),
+        widthCm: Number(artwork.packageWidthCm),
+        heightCm: Number(artwork.packageHeightCm),
+      })
+      await prisma.invoiceLineItem.update({
+        where: { id: line.id },
+        data: { shippingParcelId: parcelId },
+      })
+    } catch (err) {
+      await prisma.invoiceLineItem.update({
+        where: { id: line.id },
+        data: { shippingParcelFailedAt: new Date() },
+      })
+      console.error("[webhook] shipping parcel creation failed", {
+        sessionId,
+        invoiceId: invoice.id,
+        lineId: line.id,
+        error: err instanceof Error ? err.message : err,
+      })
+      try {
+        // Titre de l'œuvre = label de la ligne ARTWORK (celui de la ligne SHIPPING est le
+        // nom du transporteur). Fallback défensif improbable (1 œuvre = 1 ligne ARTWORK).
+        const artworkTitle =
+          invoice.lineItems.find(
+            (l) => l.type === "ARTWORK" && l.artworkId === line.artworkId
+          )?.label ?? line.label
+        await sendShippingIncidentAdminMail({
+          invoiceId: invoice.id,
+          invoiceNumber: invoice.number,
+          artworkId: line.artworkId,
+          artworkTitle,
+          shippingMethodId: line.shippingMethodId,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      } catch (mailErr) {
+        console.error("[webhook] shipping incident mail threw", {
+          sessionId,
+          error: mailErr instanceof Error ? mailErr.message : mailErr,
+        })
+      }
+    }
+  }
+}
+
+// Email de coordination retrait (PICKUP, US1bis.3) après le commit. pickupEmailSentAt =
+// marqueur d'idempotence (symétrique de emailSentAt) : rejoué si null au prochain passage.
+async function sendPickupCoordinationEmail(
+  invoice: EmittedInvoice,
+  email: string,
+  sessionId: string
+) {
+  if (invoice.fulfillmentMode !== "PICKUP" || invoice.pickupEmailSentAt) return
+  try {
+    const artworkTitles = invoice.lineItems
+      .filter((li) => li.type === "ARTWORK")
+      .map((li) => li.label)
+    const res = await sendPickupCoordinationUserMail({
+      to: email,
+      invoiceNumber: invoice.number,
+      artworkTitles,
+    })
+    if (res.ok) {
+      await prisma.invoice.update({
+        where: { id: invoice.id },
+        data: { pickupEmailSentAt: new Date() },
+      })
+    } else {
+      console.error("[webhook] pickup coordination email failed", {
+        sessionId,
+        error: res.error,
+      })
+    }
+  } catch (err) {
+    console.error("[webhook] pickup coordination email threw", {
       sessionId,
       error: err instanceof Error ? err.message : err,
     })
@@ -276,14 +436,21 @@ export async function POST(request: NextRequest) {
       if (existingInvoice || existingRecoveries.length > 0) {
         const pendingRecoveries = existingRecoveries.filter((r) => !r.stripeRefundId)
 
-        // Rejeu de l'email facture : la pièce existe mais l'envoi n'a jamais été confirmé
-        // (crash après commit, avant l'email). emailSentAt empêche le doublon.
-        if (existingInvoice && !existingInvoice.emailSentAt && user.email) {
+        // Rejeu post-commit (crash après commit, avant les effets de bord). Chaque effet
+        // a son marqueur d'idempotence : emailSentAt (email facture), shippingParcelId/
+        // shippingParcelFailedAt (colis), pickupEmailSentAt (email retrait).
+        if (existingInvoice) {
           const full = await prisma.invoice.findUnique({
             where: { id: existingInvoice.id },
             include: { lineItems: true },
           })
-          if (full) await sendInvoiceEmail(full, user.email, session.id)
+          if (full) {
+            if (!full.emailSentAt && user.email) {
+              await sendInvoiceEmail(full, user.email, session.id)
+            }
+            await createParcelsForInvoice(full, session.id)
+            if (user.email) await sendPickupCoordinationEmail(full, user.email, session.id)
+          }
         }
 
         if (pendingRecoveries.length === 0) {
@@ -332,6 +499,24 @@ export async function POST(request: NextRequest) {
       const shippingAddressFk =
         shippingAddress && stillExistingIds.has(shippingAddress.id) ? shippingAddress.id : null
 
+      // Mode de remise + devis gelé (B14). Défaut DELIVERY (cohérent avec les commandes
+      // d'avant le shipping). Les sélections sont en centimes dans les metadata → euros ici.
+      const fulfillmentMode =
+        session.metadata?.fulfillmentMode === "PICKUP" ? "PICKUP" : "DELIVERY"
+      const shippingSelections: ShippingSelection[] = parseShippingSelections(
+        session.metadata?.shippingSelections
+      ).map((s) => ({
+        artworkId: s.artworkId,
+        shippingMethodId: s.shippingMethodId,
+        label: s.label,
+        unitPriceHT: s.unitPriceHTCents / 100,
+      }))
+      // Port gelé par œuvre (euros) : Stripe a encaissé œuvre + port comme deux lignes.
+      // En cas de race, il faut rembourser AUSSI le port de l'œuvre non transférée.
+      const shippingHTByArtwork = new Map(
+        shippingSelections.map((s) => [s.artworkId, s.unitPriceHT])
+      )
+
       let emittedInvoice: Awaited<ReturnType<typeof emitSaleInvoice>> | null = null
       try {
         emittedInvoice = await prisma.$transaction(async (tx) => {
@@ -356,18 +541,22 @@ export async function POST(request: NextRequest) {
               })
             } else {
               // Déjà vendue (race) : pas de vente → marqueur de récupération + remboursement.
+              // Rembourser œuvre + port encaissés (le port de cette œuvre n'aura jamais de
+              // colis ni de ligne de facture → sinon le client le paie pour rien).
+              const shippingHT = shippingHTByArtwork.get(artworkId) ?? 0
+              const refundAmount = new Prisma.Decimal(artwork.price).plus(shippingHT)
               await tx.refundRecovery.create({
                 data: {
                   stripeSessionId: session.id,
                   buyerId: userId,
                   artworkId,
-                  amount: artwork.price,
+                  amount: refundAmount,
                 },
               })
               failures.push({
                 artworkId,
                 artworkTitle: artwork.title,
-                amountCents: Math.round(Number(artwork.price) * 100),
+                amountCents: Math.round(Number(refundAmount) * 100),
               })
             }
           }
@@ -400,6 +589,8 @@ export async function POST(request: NextRequest) {
                 city: shippingAddress?.city ?? null,
                 country: shippingAddress?.country ?? null,
               },
+              fulfillmentMode,
+              shippingSelections,
             })
           }
 
@@ -432,8 +623,15 @@ export async function POST(request: NextRequest) {
       // Email facture au client. emailSentAt (posé dans sendInvoiceEmail) garantit
       // l'unicité ; un crash après commit mais avant l'envoi est rejoué au prochain
       // passage du webhook (cf. branche existingInvoice). Remplace l'intérim reçu Stripe.
-      if (emittedInvoice && user.email) {
-        await sendInvoiceEmail(emittedInvoice, user.email, session.id)
+      if (emittedInvoice) {
+        if (user.email) {
+          await sendInvoiceEmail(emittedInvoice, user.email, session.id)
+        }
+        // Effets de bord transporteur après le commit (idempotents via marqueurs).
+        await createParcelsForInvoice(emittedInvoice, session.id)
+        if (user.email) {
+          await sendPickupCoordinationEmail(emittedInvoice, user.email, session.id)
+        }
       }
     }
     // checkout.session.expired : rien à faire — aucune facture/recovery n'est

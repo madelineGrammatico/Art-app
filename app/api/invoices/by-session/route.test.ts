@@ -55,7 +55,11 @@ describe("GET /api/invoices/by-session", () => {
     const res = await GET(makeRequest("cs_test_nothing"))
 
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ invoices: [] })
+    expect(await res.json()).toEqual({
+      invoices: [],
+      shipping: { lines: [], total: 0 },
+      fulfillmentMode: null,
+    })
   })
 
   it("returns purchased line items (PAID) for the session, with numeric prices", async () => {
@@ -100,7 +104,39 @@ describe("GET /api/invoices/by-session", () => {
     const res = await GET(makeRequest(sessionId))
 
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ invoices: [] })
+    expect(await res.json()).toEqual({
+      invoices: [],
+      shipping: { lines: [], total: 0 },
+      fulfillmentMode: null,
+    })
+  })
+
+  it("surface le port comme ligne distincte (libellé transporteur), pas comme une œuvre en plus (#8/#9)", async () => {
+    const user = await createUser()
+    const art = await createArtwork({ price: 250 })
+    const sessionId = "cs_test_shipping_line"
+    await createSaleInvoice({
+      buyerId: user.id,
+      stripeSessionId: sessionId,
+      fulfillmentMode: "DELIVERY",
+      items: [
+        { artworkId: art.id, unitPriceHT: 250, label: "Crépuscule", shipping: { unitPriceHT: 12 } },
+      ],
+    })
+    mockedAuth.mockResolvedValue(sessionFor({ id: user.id }) as never)
+
+    const res = await GET(makeRequest(sessionId))
+
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    // Une seule œuvre achetée (la ligne SHIPPING n'est pas comptée comme œuvre).
+    expect(body.invoices).toHaveLength(1)
+    expect(body.invoices[0].artwork.id).toBe(art.id)
+    // Le port est à part, avec le libellé transporteur — pas le titre de l'œuvre.
+    expect(body.shipping.lines).toHaveLength(1)
+    expect(body.shipping.total).toBe(12)
+    expect(body.shipping.lines[0].label).not.toBe("Crépuscule")
+    expect(body.fulfillmentMode).toBe("DELIVERY")
   })
 
   it("includes refunded-at-checkout items (REFUNDED) alongside purchased ones", async () => {
@@ -167,6 +203,10 @@ describe("GET /api/invoices/by-session", () => {
     const res = await GET(makeRequest(sessionId))
 
     expect(res.status).toBe(200)
-    expect(await res.json()).toEqual({ invoices: [] })
+    expect(await res.json()).toEqual({
+      invoices: [],
+      shipping: { lines: [], total: 0 },
+      fulfillmentMode: null,
+    })
   })
 })

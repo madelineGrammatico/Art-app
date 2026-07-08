@@ -1,6 +1,6 @@
 import { sendEmail, type SendEmailResult } from "./client"
 
-export type IncidentAdminMailParams = {
+export type CheckoutRaceIncidentAdminMailParams = {
   sessionId: string
   userId: string
   userEmail?: string | null
@@ -9,7 +9,7 @@ export type IncidentAdminMailParams = {
   refundError?: string
 }
 
-function buildHtml(params: IncidentAdminMailParams): string {
+function buildHtml(params: CheckoutRaceIncidentAdminMailParams): string {
   const itemsList = params.affectedItems
     .map(
       (item) =>
@@ -55,8 +55,8 @@ function escapeHtml(str: string): string {
     .replace(/'/g, "&#039;")
 }
 
-export async function sendIncidentAdminMail(
-  params: IncidentAdminMailParams
+export async function sendCheckoutRaceIncidentAdminMail(
+  params: CheckoutRaceIncidentAdminMailParams
 ): Promise<SendEmailResult> {
   const adminEmail = process.env.ADMIN_EMAIL
   if (!adminEmail) {

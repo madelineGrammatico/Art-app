@@ -87,6 +87,26 @@ describe("emitCreditNote", () => {
     expect(credit.billingStreet).toBe("10 av Foch")
   })
 
+  it("copie fulfillmentMode depuis la facture d'origine (avoir sur vente PICKUP, bug_009)", async () => {
+    const buyer = await createUser()
+    const art = await createArtwork({ price: 200 })
+    const sale = await createSaleInvoice({
+      buyerId: buyer.id,
+      fulfillmentMode: "PICKUP",
+      items: [{ artworkId: art.id, unitPriceHT: 200 }],
+    })
+
+    const credit = await emitCredit({
+      originalInvoiceId: sale.id,
+      items: [{ artworkId: art.id }],
+      stripeRefundId: "re_pickup",
+      saleDate: new Date("2026-04-01"),
+    })
+
+    // Sans copie explicite, le défaut Prisma DELIVERY contredirait la vente créditée.
+    expect(credit.fulfillmentMode).toBe("PICKUP")
+  })
+
   it("remboursement partiel : seules les œuvres remboursées apparaissent (US5.2)", async () => {
     const buyer = await createUser()
     const a1 = await createArtwork({ title: "A1", price: 100 })

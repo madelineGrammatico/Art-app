@@ -14,8 +14,7 @@ export const { auth, handlers, signIn, signOut } = NextAuth({
   adapter,
   providers: [
     Google({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+      // AUTH_GOOGLE_ID / AUTH_GOOGLE_SECRET (convention Auth.js).
       profile(profile) {
         return {
           id: profile.sub,

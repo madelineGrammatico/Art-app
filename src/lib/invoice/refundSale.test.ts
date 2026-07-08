@@ -11,21 +11,35 @@ vi.mock("@/src/lib/mail/creditNoteUserMail", () => ({
 vi.mock("./invoicePdf", () => ({
   renderInvoicePdf: vi.fn().mockResolvedValue(Buffer.from("%PDF-fake")),
 }))
+vi.mock("@/src/lib/shipping/sendcloudClient", () => ({
+  cancelParcel: vi.fn(),
+}))
+vi.mock("@/src/lib/mail/shippingIncidentAdminMail", () => ({
+  sendShippingIncidentAdminMail: vi.fn(),
+}))
 
 import { refundSale, RefundSaleError } from "./refundSale"
 import { stripe } from "@/src/lib/stripe/stripe"
 import { sendCreditNoteUserMail } from "@/src/lib/mail/creditNoteUserMail"
+import { cancelParcel } from "@/src/lib/shipping/sendcloudClient"
+import { sendShippingIncidentAdminMail } from "@/src/lib/mail/shippingIncidentAdminMail"
 import { prisma } from "@/src/lib/prisma"
 import { createUser, createArtwork, createSaleInvoice } from "@/src/test/factories"
 
 const mockedRefund = vi.mocked(stripe.refunds.create)
 const mockedMail = vi.mocked(sendCreditNoteUserMail)
+const mockedCancelParcel = vi.mocked(cancelParcel)
+const mockedShippingIncident = vi.mocked(sendShippingIncidentAdminMail)
 
 beforeEach(() => {
   mockedRefund.mockReset()
   mockedRefund.mockResolvedValue({ id: "re_test" } as never)
   mockedMail.mockReset()
   mockedMail.mockResolvedValue({ ok: true, id: "msg" })
+  mockedCancelParcel.mockReset()
+  mockedCancelParcel.mockResolvedValue({ cancelled: true })
+  mockedShippingIncident.mockReset()
+  mockedShippingIncident.mockResolvedValue({ ok: true, id: "msg_incident" })
 })
 
 // Crée un acheteur + 1 œuvre lui appartenant + une facture de vente la référençant.
@@ -192,6 +206,108 @@ describe("refundSale", () => {
       RefundSaleError
     )
     expect(mockedRefund).not.toHaveBeenCalled()
+  })
+
+  // --- B14 : remboursement des lignes SHIPPING + annulation d'étiquette ---
+
+  it("crédite la ligne ARTWORK ET la ligne SHIPPING de la même œuvre", async () => {
+    const buyer = await createUser({ email: "ship@test.local" })
+    const artwork = await createArtwork({ price: 250, ownerId: buyer.id })
+    const sale = await createSaleInvoice({
+      buyerId: buyer.id,
+      stripePaymentIntentId: "pi_ship",
+      items: [{ artworkId: artwork.id, unitPriceHT: 250, shipping: { unitPriceHT: 10, shippingParcelId: "parcel_1" } }],
+    })
+
+    const credit = await refundSale({ invoiceId: sale.id })
+
+    const lines = await prisma.invoiceLineItem.findMany({ where: { invoiceId: credit.id } })
+    expect(lines).toHaveLength(2) // ARTWORK + SHIPPING
+    expect(Number(credit.totalTTC)).toBe(-260) // 250 + 10, crédité
+
+    // Stripe remboursé du total des 2 lignes (26000 centimes).
+    expect(mockedRefund).toHaveBeenCalledWith(
+      { payment_intent: "pi_ship", amount: 26000 },
+      expect.anything()
+    )
+  })
+
+  it("annule l'étiquette Sendcloud réservée (cancelParcel) sur les lignes SHIPPING créditées", async () => {
+    const buyer = await createUser()
+    const artwork = await createArtwork({ price: 100, ownerId: buyer.id })
+    const sale = await createSaleInvoice({
+      buyerId: buyer.id,
+      stripePaymentIntentId: "pi_cancel",
+      items: [{ artworkId: artwork.id, unitPriceHT: 100, shipping: { shippingParcelId: "parcel_abc" } }],
+    })
+
+    await refundSale({ invoiceId: sale.id })
+
+    expect(mockedCancelParcel).toHaveBeenCalledOnce()
+    expect(mockedCancelParcel).toHaveBeenCalledWith("parcel_abc")
+  })
+
+  it("ne tente pas d'annulation si le colis n'a jamais été réservé (shippingParcelId null)", async () => {
+    const buyer = await createUser()
+    const artwork = await createArtwork({ price: 100, ownerId: buyer.id })
+    const sale = await createSaleInvoice({
+      buyerId: buyer.id,
+      stripePaymentIntentId: "pi_nocancel",
+      // colis en échec de création : pas de parcelId à annuler
+      items: [{ artworkId: artwork.id, unitPriceHT: 100, shipping: { shippingParcelId: null, shippingParcelFailedAt: new Date() } }],
+    })
+
+    await refundSale({ invoiceId: sale.id })
+
+    expect(mockedCancelParcel).not.toHaveBeenCalled()
+  })
+
+  it("échec d'annulation best-effort : n'annule PAS le remboursement, alerte l'admin", async () => {
+    const buyer = await createUser()
+    const artwork = await createArtwork({ price: 100, ownerId: buyer.id })
+    const sale = await createSaleInvoice({
+      buyerId: buyer.id,
+      stripePaymentIntentId: "pi_cancel_fail",
+      items: [{ artworkId: artwork.id, unitPriceHT: 100, shipping: { shippingParcelId: "parcel_stuck" } }],
+    })
+    mockedCancelParcel.mockRejectedValue(new Error("Colis déjà remis au transporteur"))
+
+    const credit = await refundSale({ invoiceId: sale.id })
+
+    // Le remboursement (avoir + remise en vente) a bien eu lieu malgré l'échec d'annulation.
+    expect(credit.type).toBe("CREDIT_NOTE")
+    expect((await prisma.artwork.findUnique({ where: { id: artwork.id } }))?.ownerId).toBeNull()
+
+    expect(mockedShippingIncident).toHaveBeenCalledOnce()
+    expect(mockedShippingIncident).toHaveBeenCalledWith(
+      expect.objectContaining({
+        invoiceId: sale.id,
+        artworkId: artwork.id,
+        error: "Colis déjà remis au transporteur",
+      })
+    )
+  })
+
+  it("remboursement partiel : ne crédite/annule que les lignes (ARTWORK+SHIPPING) de l'œuvre ciblée", async () => {
+    const buyer = await createUser()
+    const a1 = await createArtwork({ price: 100, ownerId: buyer.id })
+    const a2 = await createArtwork({ price: 200, ownerId: buyer.id })
+    const sale = await createSaleInvoice({
+      buyerId: buyer.id,
+      stripePaymentIntentId: "pi_partial_ship",
+      items: [
+        { artworkId: a1.id, unitPriceHT: 100, shipping: { unitPriceHT: 10, shippingParcelId: "parcel_a1" } },
+        { artworkId: a2.id, unitPriceHT: 200, shipping: { unitPriceHT: 20, shippingParcelId: "parcel_a2" } },
+      ],
+    })
+
+    const credit = await refundSale({ invoiceId: sale.id, artworkIds: [a1.id] })
+
+    const lines = await prisma.invoiceLineItem.findMany({ where: { invoiceId: credit.id } })
+    expect(lines).toHaveLength(2) // ARTWORK + SHIPPING de a1 seulement
+    expect(Number(credit.totalTTC)).toBe(-110)
+    expect(mockedCancelParcel).toHaveBeenCalledOnce()
+    expect(mockedCancelParcel).toHaveBeenCalledWith("parcel_a1")
   })
 
   it("borne la clé d'idempotence Stripe (≤ 255 car.) même avec beaucoup d'œuvres", async () => {

@@ -6,6 +6,8 @@ import { emitCreditNote } from "./emitCreditNote"
 import { invoiceViewModel } from "./invoiceViewModel"
 import { renderInvoicePdf } from "./invoicePdf"
 import { sendCreditNoteUserMail } from "@/src/lib/mail/creditNoteUserMail"
+import { cancelParcel } from "@/src/lib/shipping/sendcloudClient"
+import { sendShippingIncidentAdminMail } from "@/src/lib/mail/shippingIncidentAdminMail"
 
 export class RefundSaleError extends Error {}
 
@@ -54,21 +56,28 @@ export async function refundSale(args: {
   // `artworkIds` omis ⇒ remboursement total ; `[]` explicite ⇒ rejet (jamais un
   // remboursement total accidentel). Dédup : un doublon doublerait le montant Stripe
   // puis ferait échouer l'insert de l'avoir (@@unique) → Stripe et DB désynchronisés.
-  const lineByArtwork = new Map(invoice.lineItems.map((l) => [l.artworkId, l]))
+  // Multimap : une œuvre peut porter 2 lignes (ARTWORK + SHIPPING, B14). Rembourser un
+  // artworkId embarque TOUTES ses lignes (l'aller est remboursé avec l'œuvre, L221-24).
+  const linesByArtwork = new Map<string, typeof invoice.lineItems>()
+  for (const l of invoice.lineItems) {
+    const arr = linesByArtwork.get(l.artworkId) ?? []
+    arr.push(l)
+    linesByArtwork.set(l.artworkId, arr)
+  }
   const targetIds =
     args.artworkIds !== undefined
       ? Array.from(new Set(args.artworkIds))
-      : invoice.lineItems.map((l) => l.artworkId)
+      : Array.from(linesByArtwork.keys())
   if (args.artworkIds !== undefined && targetIds.length === 0) {
     throw new RefundSaleError("Aucune œuvre à rembourser")
   }
 
-  const targetLines = targetIds.map((artworkId) => {
-    const line = lineByArtwork.get(artworkId)
-    if (!line) {
+  const targetLines = targetIds.flatMap((artworkId) => {
+    const lines = linesByArtwork.get(artworkId)
+    if (!lines || lines.length === 0) {
       throw new RefundSaleError(`L'œuvre ${artworkId} n'est pas sur la facture ${invoice.number}`)
     }
-    return line
+    return lines
   })
 
   const totalRefundCents = targetLines.reduce(
@@ -130,6 +139,48 @@ export async function refundSale(args: {
     },
     { timeout: 20_000 }
   )
+
+  // Annulation des étiquettes réservées (spec §3.E, décision #6), HORS transaction et
+  // best-effort : si le colis a été réservé (shippingParcelId) mais pas encore expédié,
+  // on récupère le coût. Un échec (colis déjà remis au transporteur) ne doit JAMAIS
+  // annuler le remboursement déjà dû au client (l'aller reste remboursé, L221-24) → on
+  // logue + alerte l'admin, perte assumée. Idempotence : la garde anti-double-remboursement
+  // empêche de re-créditer (donc re-annuler) la même œuvre, pas de marqueur dédié nécessaire.
+  const parcelsToCancel = targetLines.filter(
+    (l) => l.type === "SHIPPING" && l.shippingParcelId
+  )
+  for (const line of parcelsToCancel) {
+    try {
+      await cancelParcel(line.shippingParcelId as string)
+    } catch (err) {
+      console.error("[refundSale] parcel cancellation failed", {
+        invoiceId: invoice.id,
+        lineId: line.id,
+        error: err instanceof Error ? err.message : err,
+      })
+      try {
+        // Titre de l'œuvre = label de la ligne ARTWORK (celui de la ligne SHIPPING est le
+        // nom du transporteur). Fallback défensif improbable (1 œuvre = 1 ligne ARTWORK).
+        const artworkTitle =
+          targetLines.find(
+            (l) => l.type === "ARTWORK" && l.artworkId === line.artworkId
+          )?.label ?? line.label
+        await sendShippingIncidentAdminMail({
+          invoiceId: invoice.id,
+          invoiceNumber: invoice.number,
+          artworkId: line.artworkId,
+          artworkTitle,
+          shippingMethodId: line.shippingMethodId,
+          error: err instanceof Error ? err.message : String(err),
+        })
+      } catch (mailErr) {
+        console.error("[refundSale] parcel cancellation incident mail threw", {
+          invoiceId: invoice.id,
+          error: mailErr instanceof Error ? mailErr.message : mailErr,
+        })
+      }
+    }
+  }
 
   // Email avoir (best-effort) : un échec d'envoi ne doit pas annuler le remboursement.
   if (invoice.buyer?.email) {

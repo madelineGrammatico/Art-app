@@ -34,15 +34,23 @@ export async function emitCreditNote(
     throw new Error("Un avoir ne peut créditer qu'une facture de vente")
   }
 
-  const byArtwork = new Map(original.lineItems.map((l) => [l.artworkId, l]))
-  const creditLines = args.items.map(({ artworkId }) => {
-    const line = byArtwork.get(artworkId)
-    if (!line) {
+  // Multimap : une œuvre peut porter 2 lignes (ARTWORK + SHIPPING, B14). Créditer un
+  // artworkId crédite TOUTES ses lignes — l'aller (SHIPPING) est remboursé avec l'œuvre.
+  const linesByArtwork = new Map<string, typeof original.lineItems>()
+  for (const l of original.lineItems) {
+    const arr = linesByArtwork.get(l.artworkId) ?? []
+    arr.push(l)
+    linesByArtwork.set(l.artworkId, arr)
+  }
+  const creditLines = args.items.flatMap(({ artworkId }) => {
+    const lines = linesByArtwork.get(artworkId)
+    if (!lines || lines.length === 0) {
       throw new Error(
         `L'œuvre ${artworkId} n'est pas présente sur la facture ${original.number}`
       )
     }
-    return {
+    return lines.map((line) => ({
+      type: line.type,
       artworkId: line.artworkId,
       label: line.label,
       unitPriceHT: line.unitPriceHT.negated(),
@@ -50,7 +58,8 @@ export async function emitCreditNote(
       vatRate: line.vatRate,
       vatAmount: line.vatAmount.negated(),
       lineTTC: line.lineTTC.negated(),
-    }
+      shippingMethodId: line.shippingMethodId,
+    }))
   })
 
   const zero = new Prisma.Decimal(0)
@@ -70,6 +79,9 @@ export async function emitCreditNote(
 
       buyerId: original.buyerId,
       buyerName: original.buyerName,
+      // Mode de remise copié de la facture d'origine (l'avoir reflète le document crédité ;
+      // sinon le défaut Prisma DELIVERY contredirait une vente PICKUP).
+      fulfillmentMode: original.fulfillmentMode,
 
       // Snapshot vendeur copié de la facture d'origine (immuabilité légale).
       sellerName: original.sellerName,

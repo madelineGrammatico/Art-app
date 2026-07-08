@@ -135,6 +135,146 @@ describe("emitSaleInvoice", () => {
     expect(invoice.shippingCity).toBe("Lyon")
   })
 
+  it("DELIVERY : crée une ligne SHIPPING par œuvre (même artworkId, type SHIPPING)", async () => {
+    const buyer = await createUser()
+    const artwork = await createArtwork({ title: "Crépuscule", price: 250 })
+
+    const invoice = await emit({
+      buyerId: buyer.id,
+      buyerName: "Jean Acheteur",
+      stripeSessionId: "cs_ship_1",
+      stripePaymentIntentId: null,
+      saleDate: new Date("2026-01-01"),
+      soldItems: [{ artworkId: artwork.id, label: "Crépuscule", unitPriceHT: 250 }],
+      fulfillmentMode: "DELIVERY",
+      shippingSelections: [
+        { artworkId: artwork.id, shippingMethodId: "sc_colissimo", label: "Livraison — Colissimo", unitPriceHT: 9.9 },
+      ],
+    })
+
+    expect(invoice.fulfillmentMode).toBe("DELIVERY")
+
+    const lines = await prisma.invoiceLineItem.findMany({
+      where: { invoiceId: invoice.id },
+      orderBy: { type: "asc" }, // ARTWORK avant SHIPPING
+    })
+    expect(lines).toHaveLength(2)
+
+    const artworkLine = lines.find((l) => l.type === "ARTWORK")!
+    const shippingLine = lines.find((l) => l.type === "SHIPPING")!
+    expect(artworkLine.artworkId).toBe(artwork.id)
+    expect(shippingLine.artworkId).toBe(artwork.id) // même œuvre (1 colis = 1 œuvre)
+    expect(shippingLine.label).toBe("Livraison — Colissimo")
+    expect(Number(shippingLine.unitPriceHT)).toBe(9.9)
+    expect(shippingLine.shippingMethodId).toBe("sc_colissimo")
+
+    // totaux = ARTWORK + SHIPPING
+    expect(Number(invoice.totalHT)).toBe(259.9)
+    expect(Number(invoice.totalTTC)).toBe(259.9) // franchise → pas de TVA
+  })
+
+  it("TVA de la ligne SHIPPING = régime de la facture (assujetti 5,5 %)", async () => {
+    mockedConfig.mockReturnValue(ASSUJETTIE_5_5)
+    const buyer = await createUser()
+    const artwork = await createArtwork({ price: 100 })
+
+    const invoice = await emit({
+      buyerId: buyer.id,
+      buyerName: "Jean Acheteur",
+      stripeSessionId: "cs_ship_vat",
+      stripePaymentIntentId: null,
+      saleDate: new Date("2026-01-01"),
+      soldItems: [{ artworkId: artwork.id, label: "Œuvre", unitPriceHT: 100 }],
+      fulfillmentMode: "DELIVERY",
+      shippingSelections: [
+        { artworkId: artwork.id, shippingMethodId: "sc_1", label: "Livraison", unitPriceHT: 10 },
+      ],
+    })
+
+    const shippingLine = await prisma.invoiceLineItem.findFirst({
+      where: { invoiceId: invoice.id, type: "SHIPPING" },
+    })
+    expect(Number(shippingLine?.vatRate)).toBeCloseTo(0.055)
+    expect(Number(shippingLine?.vatAmount)).toBe(0.55) // 10 * 0.055
+    expect(Number(shippingLine?.lineTTC)).toBe(10.55)
+    // totaux : HT 110, TVA 5.5 (100*0.055) + 0.55 = 6.05, TTC 116.05
+    expect(Number(invoice.totalHT)).toBe(110)
+    expect(Number(invoice.totalVat)).toBe(6.05)
+    expect(Number(invoice.totalTTC)).toBe(116.05)
+  })
+
+  it("PICKUP : aucune ligne SHIPPING même si des sélections sont fournies", async () => {
+    const buyer = await createUser()
+    const artwork = await createArtwork({ price: 100 })
+
+    const invoice = await emit({
+      buyerId: buyer.id,
+      buyerName: "Jean Acheteur",
+      stripeSessionId: "cs_pickup",
+      stripePaymentIntentId: null,
+      saleDate: new Date("2026-01-01"),
+      soldItems: [{ artworkId: artwork.id, label: "Œuvre", unitPriceHT: 100 }],
+      fulfillmentMode: "PICKUP",
+      shippingSelections: [
+        { artworkId: artwork.id, shippingMethodId: "sc_1", label: "Livraison", unitPriceHT: 10 },
+      ],
+    })
+
+    expect(invoice.fulfillmentMode).toBe("PICKUP")
+    const lines = await prisma.invoiceLineItem.findMany({ where: { invoiceId: invoice.id } })
+    expect(lines).toHaveLength(1)
+    expect(lines[0].type).toBe("ARTWORK")
+    expect(Number(invoice.totalTTC)).toBe(100)
+  })
+
+  it("DELIVERY : œuvre transférée sans devis correspondant → rejet (pas de shipping à 0 €)", async () => {
+    const buyer = await createUser()
+    const a1 = await createArtwork({ price: 100 })
+    const a2 = await createArtwork({ price: 100 })
+
+    await expect(
+      emit({
+        buyerId: buyer.id,
+        buyerName: "Jean Acheteur",
+        stripeSessionId: "cs_missing_quote",
+        stripePaymentIntentId: null,
+        saleDate: new Date("2026-01-01"),
+        soldItems: [{ artworkId: a1.id, label: "A1", unitPriceHT: 100 }],
+        fulfillmentMode: "DELIVERY",
+        // sélection pour a2 seulement, pas pour a1 transférée
+        shippingSelections: [
+          { artworkId: a2.id, shippingMethodId: "sc_1", label: "Livraison", unitPriceHT: 10 },
+        ],
+      })
+    ).rejects.toThrow()
+  })
+
+  it("DELIVERY : une sélection pour une œuvre non transférée (race) est ignorée", async () => {
+    const buyer = await createUser()
+    const a1 = await createArtwork({ price: 100 })
+    const a2 = await createArtwork({ price: 100 })
+
+    const invoice = await emit({
+      buyerId: buyer.id,
+      buyerName: "Jean Acheteur",
+      stripeSessionId: "cs_race_ship",
+      stripePaymentIntentId: null,
+      saleDate: new Date("2026-01-01"),
+      soldItems: [{ artworkId: a1.id, label: "A1", unitPriceHT: 100 }], // a2 non transférée
+      fulfillmentMode: "DELIVERY",
+      shippingSelections: [
+        { artworkId: a1.id, shippingMethodId: "sc_1", label: "Livraison A1", unitPriceHT: 10 },
+        { artworkId: a2.id, shippingMethodId: "sc_2", label: "Livraison A2", unitPriceHT: 20 },
+      ],
+    })
+
+    const lines = await prisma.invoiceLineItem.findMany({ where: { invoiceId: invoice.id } })
+    // 1 ARTWORK + 1 SHIPPING pour a1 seulement ; rien pour a2
+    expect(lines).toHaveLength(2)
+    expect(lines.filter((l) => l.artworkId === a2.id)).toHaveLength(0)
+    expect(Number(invoice.totalHT)).toBe(110)
+  })
+
   it("refuse une 2e facture de vente pour la même session Stripe (@@unique)", async () => {
     const buyer = await createUser()
     const a1 = await createArtwork({ price: 100 })

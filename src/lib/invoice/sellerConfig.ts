@@ -72,6 +72,19 @@ let cached: SellerConfig | null = null
  * le démarrage si la config est absente/incohérente — US0.1.
  */
 export function getSellerConfig(): SellerConfig {
-  if (!cached) cached = parseSellerConfig(process.env)
+  if (!cached) {
+    try {
+      cached = parseSellerConfig(process.env)
+    } catch (err) {
+      // Message ZodError = getter en lecture seule → rethrow en Error simple lisible.
+      if (err instanceof z.ZodError) {
+        throw new Error(
+          "Configuration vendeur invalide : " +
+            err.issues.map((i) => `${i.path.join(".") || "?"} (${i.message})`).join(" ; ")
+        )
+      }
+      throw err
+    }
+  }
   return cached
 }

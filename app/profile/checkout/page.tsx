@@ -9,6 +9,7 @@ import Link from 'next/link'
 import { Button } from '@/src/components/ui/button'
 import { prisma } from '@/src/lib/prisma'
 import CheckoutPanel from '@/src/components/checkout/CheckoutPanel'
+import { artworkBlocksDelivery } from '@/src/lib/shipping/thresholds'
 
 export default async function CheckoutPage() {
   const session = await auth()
@@ -41,6 +42,13 @@ export default async function CheckoutPage() {
   }))
 
   const total = items.reduce((sum, it) => sum + it.amount, 0)
+
+  // Indice UX : livraison indisponible si au moins une œuvre est hors gabarit standard,
+  // en retrait forcé (choix admin) ou a des dimensions manquantes (jamais de devis
+  // possible, cf. artworkBlocksDelivery). Le devis live au checkout reste l'autorité (spec §2).
+  const deliveryAvailable = !(basket?.items ?? []).some(
+    (item) => artworkBlocksDelivery(item.artwork)
+  )
 
   if (items.length === 0) {
     return (
@@ -133,7 +141,12 @@ export default async function CheckoutPage() {
             </Card>
           ))}
 
-          <CheckoutPanel userId={userId} addresses={addresses} total={total} />
+          <CheckoutPanel
+            userId={userId}
+            addresses={addresses}
+            total={total}
+            deliveryAvailable={deliveryAvailable}
+          />
         </div>
       </section>
     </main>

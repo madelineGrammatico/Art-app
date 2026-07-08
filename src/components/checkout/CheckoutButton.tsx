@@ -3,15 +3,21 @@
 import { useState } from "react"
 import { Button } from "@/src/components/ui/button"
 
+type ShippingSelection = { artworkId: string; shippingMethodId: string }
+
 type Props = {
   billingAddressId: string
   shippingAddressId: string
+  fulfillmentMode: "DELIVERY" | "PICKUP"
+  shippingSelections?: ShippingSelection[]
   disabled?: boolean
 }
 
 export default function CheckoutButton({
   billingAddressId,
   shippingAddressId,
+  fulfillmentMode,
+  shippingSelections,
   disabled,
 }: Props) {
   const [isLoading, setIsLoading] = useState(false)
@@ -27,7 +33,14 @@ export default function CheckoutButton({
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ billingAddressId, shippingAddressId }),
+        body: JSON.stringify({
+          billingAddressId,
+          fulfillmentMode,
+          // L'adresse de livraison + la sélection transporteur ne valent qu'en livraison.
+          ...(fulfillmentMode === "DELIVERY"
+            ? { shippingAddressId, shippingSelections }
+            : {}),
+        }),
       })
 
       const data = await response.json()

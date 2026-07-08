@@ -34,14 +34,24 @@ export default async function BasketPage() {
 
   const { basket, removedItemsCount = 0 } = basketResult
   
-  // Convertir les Decimal en nombres pour les composants clients
+  // Ne passer aux composants clients QUE des champs sérialisables : on projette
+  // explicitement l'œuvre (sinon les Decimal — price + dimensions œuvre/colis —
+  // traversent la frontière RSC et déclenchent le warning « Decimal not supported »).
   type BasketItemType = NonNullable<typeof basket>['items'][number]
   const items = (basket?.items || []).map((item: BasketItemType) => ({
-    ...item,
+    id: item.id,
+    createdAt: item.createdAt,
+    updatedAt: item.updatedAt,
+    basketId: item.basketId,
+    artworkId: item.artworkId,
     artwork: {
-      ...item.artwork,
-      price: Number(item.artwork.price)
-    }
+      id: item.artwork.id,
+      title: item.artwork.title,
+      price: Number(item.artwork.price),
+      ownerId: item.artwork.ownerId,
+      certificateId: item.artwork.certificateId,
+      createdAt: item.artwork.createdAt,
+    },
   }))
   
   type BasketItemWithNumberPrice = typeof items[number]

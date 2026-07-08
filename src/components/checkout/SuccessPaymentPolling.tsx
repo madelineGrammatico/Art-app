@@ -4,7 +4,10 @@ import { useEffect, useState } from "react"
 import { Card } from "@/src/components/ui/card"
 import { Button } from "@/src/components/ui/button"
 import Link from "next/link"
-import PurchasedItemsPanel, { type PurchasedInvoice } from "./PurchasedItemsPanel"
+import PurchasedItemsPanel, {
+  type PurchasedInvoice,
+  type ShippingSummary,
+} from "./PurchasedItemsPanel"
 
 const POLL_INTERVAL_MS = 2000
 const POLL_TIMEOUT_MS = 30000
@@ -15,8 +18,14 @@ interface Props {
 
 type Status = "polling" | "found" | "timeout"
 
+type BySessionResponse = {
+  invoices: PurchasedInvoice[]
+  shipping?: ShippingSummary
+}
+
 export default function SuccessPaymentPolling({ sessionId }: Props) {
   const [invoices, setInvoices] = useState<PurchasedInvoice[]>([])
+  const [shipping, setShipping] = useState<ShippingSummary | undefined>(undefined)
   const [status, setStatus] = useState<Status>("polling")
 
   useEffect(() => {
@@ -30,10 +39,11 @@ export default function SuccessPaymentPolling({ sessionId }: Props) {
           { cache: "no-store" }
         )
         if (!res.ok) return
-        const data: { invoices: PurchasedInvoice[] } = await res.json()
+        const data: BySessionResponse = await res.json()
         if (cancelled) return
         if (data.invoices.length > 0) {
           setInvoices(data.invoices)
+          setShipping(data.shipping)
           setStatus("found")
         }
       } catch {
@@ -59,7 +69,7 @@ export default function SuccessPaymentPolling({ sessionId }: Props) {
   }, [sessionId])
 
   if (status === "found") {
-    return <PurchasedItemsPanel invoices={invoices} />
+    return <PurchasedItemsPanel invoices={invoices} shipping={shipping} />
   }
 
   if (status === "timeout") {
