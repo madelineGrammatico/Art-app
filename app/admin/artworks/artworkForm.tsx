@@ -8,6 +8,7 @@ import { createArtworkAction, editArtworkAction } from '../../api/artworks/artwo
 import React from 'react'
 import { Header } from '@/src/components/Header'
 import { Card } from '@/src/components/ui/card'
+import { ArtworkImagesField, type FormImage } from './ArtworkImagesField'
 
 // Vue sérialisée d'une œuvre pour le formulaire (client) : les Decimal Prisma sont
 // convertis en string/number côté serveur avant de traverser la frontière RSC → pas de
@@ -26,9 +27,29 @@ export type ArtworkFormData = {
   packageHeightCm: number | string | null
   pickupOnly: boolean
   requiresSpecialistCarrier: boolean
+  images?: { url: string; pathname: string; isPrimary: boolean }[]
 }
 
 export function ArtworkForm({artwork}: {artwork?: ArtworkFormData}) {
+
+    // État des images géré hors FormData (upload asynchrone vers Blob + réordonnancement D&D).
+    // `key` = id client stable pour React/dnd-kit ; l'ordre du tableau porte la position.
+    const [images, setImages] = React.useState<FormImage[]>(() =>
+        (artwork?.images ?? []).map((img) => ({ key: crypto.randomUUID(), ...img, persisted: true }))
+    )
+
+    // Verrou de soumission tant qu'un upload est en cours : sans lui, un clic « Ajouter »
+    // pendant l'upload enregistrerait l'œuvre sans l'image en vol (et laisserait un blob orphelin).
+    const [isUploading, setIsUploading] = React.useState(false)
+
+    // Projette l'état UI vers le contrat de la server action (position = index courant).
+    const imagesPayload = () =>
+        images.map((img, i) => ({
+            url: img.url,
+            pathname: img.pathname,
+            position: i,
+            isPrimary: img.isPrimary,
+        }))
 
     // "" → null (donnée manquante), sinon nombre. cleanDim côté action revalide (> 0, fini).
     const dimOrNull = (raw: FormDataEntryValue | null): number | null => {
@@ -57,6 +78,7 @@ export function ArtworkForm({artwork}: {artwork?: ArtworkFormData}) {
                 price: Number(FormData.get('price')),
                 ...dims,
                 pickupOnly,
+                images: imagesPayload(),
             })
             error= json.error
         } else {
@@ -65,6 +87,7 @@ export function ArtworkForm({artwork}: {artwork?: ArtworkFormData}) {
                 price: Number(FormData.get('price')),
                 ...dims,
                 pickupOnly,
+                images: imagesPayload(),
             })
             error= json.error
         }
@@ -237,7 +260,10 @@ export function ArtworkForm({artwork}: {artwork?: ArtworkFormData}) {
                             ⚠️ Hors gabarit transporteur standard — retrait sur place ou transporteur spécialisé.
                         </p>
                     )}
-                    <SubmitButton/>
+
+                    <ArtworkImagesField value={images} onChange={setImages} onUploadingChange={setIsUploading} />
+
+                    <SubmitButton disabled={isUploading}/>
                 </Form>
             </div>
         </Card>
@@ -245,14 +271,14 @@ export function ArtworkForm({artwork}: {artwork?: ArtworkFormData}) {
         )
     }
 
-    const SubmitButton = () => {
+    const SubmitButton = ({ disabled }: { disabled?: boolean }) => {
     const {pending} = useFormStatus()
 
     return (
         <Button
-            disabled={pending}
+            disabled={pending || disabled}
             type="submit"
             size='lg'
-        >{ pending ? "Chargement..." : "Ajouter" }</Button>
+        >{ pending ? "Chargement..." : disabled ? "Upload en cours…" : "Ajouter" }</Button>
     )
 }

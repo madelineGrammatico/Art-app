@@ -4,7 +4,7 @@ Ce qui reste à faire, dans l'ordre prévu. Pour le « pourquoi » et les décis
 
 ## Ordre des branches
 
-`B11` (sélection adresse) ✅ → **B12_CONTEXT** (contexte projet, en cours) → **B13_INVOICE** (refacto Invoice) → **B14_SHIPING** (frais de livraison dynamiques).
+`B11` (sélection adresse) ✅ → **B12_CONTEXT** (contexte projet, en cours) → **B13_INVOICE** (refacto Invoice) → **B14_SHIPING** (frais de livraison dynamiques) → **B15_REFACTO_BLOB** (hébergement des images d'œuvres).
 
 Raison de l'ordre INVOICE avant SHIPING : une fois `Invoice` structurée en line items (B13_INVOICE), ajouter le shipping comme line item additionnel devient trivial. Le faire avant compliquerait la migration.
 
@@ -134,6 +134,67 @@ de montant).
   **NOT NULL** même pour les lignes `SHIPPING` (1 œuvre = 1 colis ; cf. [spec §0](docs/B14-shipping-spec.md)),
   contrainte `@@unique([invoiceId, artworkId, type])` — évolution non destructive du modèle B13.
 - Alternative `shipping_options` natif Stripe : à évaluer, possiblement trop rigide pour le filtrage spécialistes.
+
+---
+
+## B15_REFACTO_BLOB — Hébergement des images d'œuvres
+
+> **Note de design** (pas de spec/user-stories dédiée) : le risque de cette feature est
+> technique/I-O (intégration service externe, upload, D&D), pas domanial — la cérémonie
+> spec-first de B13/B14 y serait du process pour du process. Décisions actées ci-dessous ;
+> tests ciblés + vérification e2e manuelle (cf. §Tests).
+
+**Contexte / trou constaté :** le modèle `Artwork` n'a **aucun champ image** et le form admin
+ne gère aucun upload. Une galerie d'art ne peut pas passer en prod sans afficher les œuvres →
+chantier bloquant.
+
+**Décisions verrouillées :**
+| Décision | Choix | Pourquoi |
+|---|---|---|
+| Hébergeur | **Vercel Blob** | Déploiement Vercel, intégration native `next/image`, pas d'egress à gérer |
+| Optimisation | **`next/image`** (framework) | Resize/WebP/AVIF/responsive gratuits → pas besoin d'un service d'images (Cloudinary…) |
+| Nb d'images | **Table `ArtworkImage`** (galerie multi-vues) | Angles/détails attendus en art |
+| Accès Blob | **Public** | Protection (URLs signées, filigrane) **différée** ; se posera par-dessus sans refonte |
+| Réordonnancement | **Drag & drop, admin only** (`dnd-kit`) | Produit `position`/`isPrimary` ; le public consomme, statique (pas de `dnd-kit` dans le bundle public) |
+| Méthode | **Tests ciblés + cette note** | cf. encadré ci-dessus |
+
+**Modèle :** nouvelle table `ArtworkImage` (`artworkId` FK `onDelete: Cascade`, `url`,
+`pathname` [clé Blob, requise pour `del()`], `position`, `isPrimary`, `createdAt`) ;
+`Artwork.images ArtworkImage[]`. Ajout **non destructif** (0 image possible → placeholder).
+**Invariants tenus côté server action** (pas en contrainte DB) : une seule `isPrimary` par œuvre
+dès ≥ 1 image ; `position` contiguës dès 0, renormalisées à chaque édition.
+
+**Flux d'upload = direct navigateur → Blob** (pas via server action, qui plafonne ~4,5 Mo — une
+photo d'œuvre dépasse). Un route handler `app/api/artworks/upload/route.ts` (`handleUpload` de
+`@vercel/blob/client`) délivre un jeton signé **après garde ADMIN** (`auth()` + rôle) + restriction
+`contentType` (`image/*`) et taille — **point sécurité** : sans ce garde le bucket est ouvert à tous.
+Seules les `url`/`pathname` reviennent à la server action, qui persiste les `ArtworkImage`.
+
+**Étapes :**
+1. Migration Prisma (`ArtworkImage` + relation) — `db:migrate`, non destructif.
+2. Deps : `@vercel/blob`, `@dnd-kit/core` + `@dnd-kit/sortable`.
+3. Route handler `upload` (`handleUpload` + garde ADMIN + restrictions type/taille).
+4. Zod (`src/lib/shema.ts`) : schéma des images reçues (URL Blob, `position` ≥ 0, un seul `isPrimary`).
+5. Server actions (`artwork.action.ts`) : `create`/`edit` persistent + renormalisent `position` +
+   garantissent primaire unique ; `delete` → `del()` sur chaque `pathname` **avant** suppression
+   (Cascade nettoie la DB, pas le Blob → sinon orphelins facturés).
+6. Form admin (`artworkForm.tsx`) : input fichier multiple, upload client, vignettes, **D&D dnd-kit**,
+   choix primaire, suppression d'une vue.
+7. Affichage public : `next.config` → `images.remotePatterns` (`*.public.blob.vercel-storage.com`) ;
+   `VerticalCard` (galerie) `next/image` sur la primaire + placeholder ; `preview/[artworkId]`
+   primaire en grand + miniatures.
+8. Env : `BLOB_READ_WRITE_TOKEN` (auto sur Vercel une fois le store Blob créé ; à recopier en `.env` local).
+
+**Tests (ciblés — logique à vrai risque de régression) :** garde d'autorisation du route handler
+(seul ADMIN obtient un jeton) ; invariant « une seule primaire » + renormalisation `position` ;
+validation Zod ; orchestration `delete` (blob supprimé avant l'œuvre).
+**Pas de test unitaire** sur le wrapper SDK Blob (`put`/`del`), le composant D&D, le rendu `next/image`.
+**Vraie couverture = vérification e2e manuelle** (`/verify`) : upload multi-images, réordonnancement
+D&D, changement de primaire, suppression d'une vue puis de l'œuvre, affichage public optimisé.
+
+**Hors périmètre (différé, sans dette d'archi) :** protection droit à l'image — posable plus tard
+sur ce socle (Blob privé + URLs signées, aperçu basse-déf filigrané, anti-hotlink). Le choix « Blob
+public » aujourd'hui ne bloque aucune de ces évolutions.
 
 ---
 

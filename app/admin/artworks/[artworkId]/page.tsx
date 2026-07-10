@@ -12,7 +12,10 @@ export default async function page({params}: Pageprops) {
     const artwork = await prisma.artwork.findFirst({
         where: {
             id: String(artworkId)
-        }
+        },
+        include: {
+            images: { orderBy: { position: 'asc' } },
+        },
     })
     if (!artwork) return (
         <Card className='w-full'>
@@ -38,6 +41,11 @@ export default async function page({params}: Pageprops) {
         packageHeightCm: dim(artwork.packageHeightCm),
         pickupOnly: artwork.pickupOnly,
         requiresSpecialistCarrier: artwork.requiresSpecialistCarrier,
+        images: artwork.images.map((img) => ({
+            url: img.url,
+            pathname: img.pathname,
+            isPrimary: img.isPrimary,
+        })),
     }
 
     return (

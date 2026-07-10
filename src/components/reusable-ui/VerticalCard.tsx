@@ -2,14 +2,16 @@ import React from 'react'
 import { buttonVariants } from '../ui/button'
 import Link from 'next/link'
 import AddToBasketButton from '../basket/AddToBasketButton'
+import { ArtworkImage } from './ArtworkImage'
 
 type VerticalCardProps = {
-  title: string, 
-  linkPage: string, 
+  title: string,
+  linkPage: string,
   index: number,
   artworkId: string,
+  imageUrl?: string | null,
 }
-export default function VerticalCard({title, linkPage, index, artworkId }: VerticalCardProps) {
+export default function VerticalCard({title, linkPage, index, artworkId, imageUrl }: VerticalCardProps) {
   return (
     <div 
     
@@ -19,9 +21,9 @@ export default function VerticalCard({title, linkPage, index, artworkId }: Verti
           key={artwork.id}
           className='text-secondary-foreground shadow-sm '
         > */}
-        <div 
-        className={index%2===0?'col-start-1 row-start-1 aspect-square w-1/1 min-w-96 bg-slate-800': 'col-start-2 row-start-1 aspect-square w-1/1 min-w-96 bg-slate-800'}>
-        
+        <div
+        className={index%2===0?'relative overflow-hidden col-start-1 row-start-1 aspect-square w-1/1 min-w-96 bg-slate-800': 'relative overflow-hidden col-start-2 row-start-1 aspect-square w-1/1 min-w-96 bg-slate-800'}>
+          <ArtworkImage url={imageUrl} alt={title} sizes="(min-width: 1536px) 40vw, 50vw" />
         </div>
         <div
           className={index%2===0?'col-start-2 row-start-1 pl-32 gap-4 flex flex-col aspect-square w-1/1 h-full text-right':'col-start-1 row-start-1 pr-32 gap-4 flex flex-col aspect-square w-1/1'}>

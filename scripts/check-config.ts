@@ -47,6 +47,8 @@ const required = [
   "STRIPE_WEBHOOK_SECRET",
   "RESEND_KEY",
   "ADMIN_EMAIL",
+  "BLOB_READ_WRITE_TOKEN", // Vercel Blob (B15) — sans lui l'upload d'images admin est mort
+                           // (le site public sert quand même les images déjà stockées en lecture).
   // EMAIL_FROM : volontairement PAS requis — a un fallback (onboarding@resend.dev).
 ]
 for (const key of required) {

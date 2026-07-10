@@ -37,3 +37,15 @@ export const artworkDimensionsSchema = z.object({
     heightCm: positiveDimension,
     pickupOnly: z.boolean(),
 })
+
+// Image d'œuvre reçue du form admin (B15) : le fichier est déjà dans Blob, on ne valide
+// ici que la référence. `position`/`isPrimary` sont renormalisés côté action (autorité :
+// une seule primaire, positions contiguës) → Zod ne fait que borner la forme.
+export const artworkImageSchema = z.object({
+    url: z.string().url("URL d'image invalide"),
+    pathname: z.string().min(1, "Référence Blob (pathname) manquante"),
+    position: z.number().int().nonnegative(),
+    isPrimary: z.boolean(),
+})
+
+export const artworkImagesSchema = z.array(artworkImageSchema)
