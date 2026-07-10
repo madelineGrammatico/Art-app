@@ -129,7 +129,10 @@ export function ArtworkImagesField({
     onUploadingChange?.(true)
     setError(null)
     try {
-      const uploaded: FormImage[] = []
+      // Commit APRÈS CHAQUE upload réussi (accumulateur local `next`, pas `value` — les
+      // props ne se rafraîchissent pas en cours de boucle) : si un fichier suivant échoue,
+      // les blobs déjà uploadés restent référencés dans le form (pas d'orphelin, pas de perte).
+      let next = value
       for (const file of Array.from(files)) {
         // Upload direct navigateur → Blob ; /api/artworks/upload ne délivre que le jeton
         // (garde ADMIN). Contourne la limite de corps des server actions (~4,5 Mo).
@@ -137,15 +140,18 @@ export function ArtworkImagesField({
           access: 'public',
           handleUploadUrl: '/api/artworks/upload',
         })
-        uploaded.push({
-          key: crypto.randomUUID(),
-          url: blob.url,
-          pathname: blob.pathname,
-          isPrimary: false,
-          persisted: false, // pas encore en base → suppression immédiate si retirée.
-        })
+        next = withPrimary([
+          ...next,
+          {
+            key: crypto.randomUUID(),
+            url: blob.url,
+            pathname: blob.pathname,
+            isPrimary: false,
+            persisted: false, // pas encore en base → suppression immédiate si retirée.
+          },
+        ])
+        onChange(next)
       }
-      onChange(withPrimary([...value, ...uploaded]))
     } catch (e) {
       setError(e instanceof Error ? e.message : "Échec de l'upload")
     } finally {
