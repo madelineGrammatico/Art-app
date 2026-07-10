@@ -31,6 +31,9 @@ export default async function page({params}: Pageprops) {
     const price = Number(artwork.price)
     const isAvailable = artwork.ownerId === null
     const primaryImage = artwork.images.find((img) => img.isPrimary) ?? artwork.images[0] ?? null
+    // Vues secondaires uniquement : la primaire est déjà affichée en grand → l'exclure de la
+    // bande de miniatures pour ne pas la montrer deux fois.
+    const secondaryImages = artwork.images.filter((img) => img.id !== primaryImage?.id)
 
     return (
         <div className='flex flex-col w-full py-4 gap-4'>
@@ -53,9 +56,9 @@ export default async function page({params}: Pageprops) {
                             priority
                         />
                     </div>
-                    {artwork.images.length > 1 && (
+                    {secondaryImages.length > 0 && (
                         <div className='flex flex-wrap gap-2'>
-                            {artwork.images.map((img) => (
+                            {secondaryImages.map((img) => (
                                 <div
                                     key={img.id}
                                     className='relative h-20 w-20 overflow-hidden rounded-md bg-slate-800'
