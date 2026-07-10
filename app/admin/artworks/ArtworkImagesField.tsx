@@ -102,9 +102,13 @@ function SortableThumb({
 export function ArtworkImagesField({
   value,
   onChange,
+  onUploadingChange,
 }: {
   value: FormImage[]
   onChange: (images: FormImage[]) => void
+  // Remonte l'état d'upload au form parent → il désactive la soumission tant qu'un upload
+  // est en cours (sinon l'œuvre serait enregistrée sans l'image en vol, blob orphelin).
+  onUploadingChange?: (uploading: boolean) => void
 }) {
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -122,6 +126,7 @@ export function ArtworkImagesField({
   async function handleFiles(files: FileList | null) {
     if (!files || files.length === 0) return
     setUploading(true)
+    onUploadingChange?.(true)
     setError(null)
     try {
       const uploaded: FormImage[] = []
@@ -145,6 +150,7 @@ export function ArtworkImagesField({
       setError(e instanceof Error ? e.message : "Échec de l'upload")
     } finally {
       setUploading(false)
+      onUploadingChange?.(false)
     }
   }
 

@@ -38,6 +38,10 @@ export function ArtworkForm({artwork}: {artwork?: ArtworkFormData}) {
         (artwork?.images ?? []).map((img) => ({ key: crypto.randomUUID(), ...img, persisted: true }))
     )
 
+    // Verrou de soumission tant qu'un upload est en cours : sans lui, un clic « Ajouter »
+    // pendant l'upload enregistrerait l'œuvre sans l'image en vol (et laisserait un blob orphelin).
+    const [isUploading, setIsUploading] = React.useState(false)
+
     // Projette l'état UI vers le contrat de la server action (position = index courant).
     const imagesPayload = () =>
         images.map((img, i) => ({
@@ -257,9 +261,9 @@ export function ArtworkForm({artwork}: {artwork?: ArtworkFormData}) {
                         </p>
                     )}
 
-                    <ArtworkImagesField value={images} onChange={setImages} />
+                    <ArtworkImagesField value={images} onChange={setImages} onUploadingChange={setIsUploading} />
 
-                    <SubmitButton/>
+                    <SubmitButton disabled={isUploading}/>
                 </Form>
             </div>
         </Card>
@@ -267,14 +271,14 @@ export function ArtworkForm({artwork}: {artwork?: ArtworkFormData}) {
         )
     }
 
-    const SubmitButton = () => {
+    const SubmitButton = ({ disabled }: { disabled?: boolean }) => {
     const {pending} = useFormStatus()
 
     return (
         <Button
-            disabled={pending}
+            disabled={pending || disabled}
             type="submit"
             size='lg'
-        >{ pending ? "Chargement..." : "Ajouter" }</Button>
+        >{ pending ? "Chargement..." : disabled ? "Upload en cours…" : "Ajouter" }</Button>
     )
 }
