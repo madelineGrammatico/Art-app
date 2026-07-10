@@ -69,8 +69,18 @@ export async function DELETE(request: NextRequest): Promise<NextResponse> {
   }
 
   // Garde-fou : on ne supprime qu'une URL de NOTRE store Blob (le token est de toute façon
-  // scoped, mais on rejette tôt une entrée aberrante).
-  if (typeof url !== "string" || !url.includes(".public.blob.vercel-storage.com/")) {
+  // scoped, mais on rejette tôt une entrée aberrante). Parse réel du host — un simple
+  // `includes` serait contournable par une URL type `https://evil.com/?x=.public.blob…/`.
+  if (typeof url !== "string") {
+    return NextResponse.json({ error: "URL Blob invalide" }, { status: 400 })
+  }
+  let parsedUrl: URL
+  try {
+    parsedUrl = new URL(url)
+  } catch {
+    return NextResponse.json({ error: "URL Blob invalide" }, { status: 400 })
+  }
+  if (parsedUrl.protocol !== "https:" || !parsedUrl.hostname.endsWith(".public.blob.vercel-storage.com")) {
     return NextResponse.json({ error: "URL Blob invalide" }, { status: 400 })
   }
 

@@ -2,7 +2,6 @@ import { buttonVariants } from '@/src/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/src/components/ui/card'
 import { prisma } from '@/src/lib/prisma'
 import Link from 'next/link'
-import Image from 'next/image'
 import React from 'react'
 import AddToBasketButton from '@/src/components/basket/AddToBasketButton'
 import { ArtworkImage } from '@/src/components/reusable-ui/ArtworkImage'
@@ -63,13 +62,7 @@ export default async function page({params}: Pageprops) {
                                     key={img.id}
                                     className='relative h-20 w-20 overflow-hidden rounded-md bg-slate-800'
                                 >
-                                    <Image
-                                        src={img.url}
-                                        alt={artwork.title}
-                                        fill
-                                        sizes='5rem'
-                                        className='object-cover'
-                                    />
+                                    <ArtworkImage url={img.url} alt={artwork.title} sizes='5rem' />
                                 </div>
                             ))}
                         </div>

@@ -142,25 +142,42 @@ export const editArtworkAction = async (id: string, artwork: ArtworkInput) => {
             return { error: images.error }
         }
 
-        // Remplacement du jeu d'images : on repart du set voulu (deleteMany + create dans
-        // une transaction). Les images retirées par l'admin ne sont plus dans le payload →
-        // leur fichier Blob doit être supprimé (best-effort, hors transaction DB).
+        // Diff du jeu d'images (identité = url du blob) plutôt qu'un deleteMany+recreate
+        // global : on ne touche que ce qui change → les lignes conservées gardent leur id
+        // et leur createdAt (pas de churn). Retirées → supprimées (+ blob del best-effort) ;
+        // nouvelles → créées ; conservées dont position/isPrimary bougent → mises à jour.
         const existing = await prisma.artworkImage.findMany({
             where: { artworkId: id },
-            select: { url: true },
+            select: { id: true, url: true, position: true, isPrimary: true },
         })
-        const keptUrls = new Set(images.data.map((img) => img.url))
-        const removedUrls = existing.filter((img) => !keptUrls.has(img.url)).map((img) => img.url)
+        const existingByUrl = new Map(existing.map((img) => [img.url, img]))
+        const desiredUrls = new Set(images.data.map((img) => img.url))
+
+        const removed = existing.filter((img) => !desiredUrls.has(img.url))
+        const toCreate = images.data.filter((img) => !existingByUrl.has(img.url))
+        const toUpdate = images.data.filter((img) => {
+            const prev = existingByUrl.get(img.url)
+            return prev && (prev.position !== img.position || prev.isPrimary !== img.isPrimary)
+        })
+        const removedUrls = removed.map((img) => img.url)
 
         await prisma.$transaction([
-            prisma.artworkImage.deleteMany({ where: { artworkId: id } }),
+            ...(removed.length > 0
+                ? [prisma.artworkImage.deleteMany({ where: { id: { in: removed.map((img) => img.id) } } })]
+                : []),
+            ...toUpdate.map((img) =>
+                prisma.artworkImage.update({
+                    where: { id: existingByUrl.get(img.url)!.id },
+                    data: { position: img.position, isPrimary: img.isPrimary },
+                })
+            ),
             prisma.artwork.update({
                 where: { id },
                 data: {
                     title: artwork.title,
                     price: artwork.price,
                     ...shippingFields.data,
-                    images: { create: images.data },
+                    images: { create: toCreate },
                 },
             }),
         ])
